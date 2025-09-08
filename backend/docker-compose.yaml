@@ -1,0 +1,24 @@
+# Define a versão do Docker Compose. A versão 3.8 é moderna e amplamente compatível.
+version: "3.8"
+
+services:
+  activemq:
+    # IMAGEM ATUALIZADA: Usando a imagem oficial do Apache ActiveMQ Classic.
+    image: apache/activemq-classic:6.1.2
+    container_name: activemq-broker
+    ports:
+      # Porta da interface web de administração -> http://localhost:8161
+      - "8161:8161"
+      # Porta de conexão do broker para o Spring Boot -> tcp://localhost:61616
+      - "61616:61616"
+    # Adicionando variáveis de ambiente para garantir o usuário/senha (embora 'admin'/'admin' seja o padrão)
+    environment:
+      - ACTIVEMQ_USER=admin
+      - ACTIVEMQ_PASSWORD=admin
+    volumes:
+      - activemq-data:/opt/apache-activemq-6.1.2/data
+      - activemq-conf:/opt/apache-activemq-6.1.2/conf
+
+volumes:
+  activemq-data:
+  activemq-conf:

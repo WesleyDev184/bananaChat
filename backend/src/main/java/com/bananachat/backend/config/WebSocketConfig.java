@@ -14,8 +14,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
   public void configureMessageBroker(MessageBrokerRegistry config) {
     // Define o prefixo para os destinos onde as mensagens serão roteadas pelo
     // broker.
-    // Clientes React se inscreverão em destinos que começam com "/topic".
-    config.enableSimpleBroker("/topic");
+    // Clientes React se inscreverão em destinos que começam com "/topic" e
+    // "/queue".
+    config.enableSimpleBroker("/topic", "/queue");
 
     // Define o prefixo para mensagens que são destinadas a métodos anotados com
     // @MessageMapping.

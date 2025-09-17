@@ -22,6 +22,9 @@ public class ChatHistory {
   @Column(nullable = false)
   private String sender;
 
+  @Column(length = 1000)
+  private String recipient; // Para mensagens privadas
+
   @Column(nullable = false, length = 1000)
   private String content;
 
@@ -46,6 +49,14 @@ public class ChatHistory {
   public ChatHistory(String sender, String content, MessageType type) {
     this();
     this.sender = sender;
+    this.content = content;
+    this.type = type;
+  }
+
+  public ChatHistory(String sender, String recipient, String content, MessageType type) {
+    this();
+    this.sender = sender;
+    this.recipient = recipient;
     this.content = content;
     this.type = type;
   }
@@ -89,5 +100,13 @@ public class ChatHistory {
 
   public void setTimestamp(LocalDateTime timestamp) {
     this.timestamp = timestamp;
+  }
+
+  public String getRecipient() {
+    return recipient;
+  }
+
+  public void setRecipient(String recipient) {
+    this.recipient = recipient;
   }
 }

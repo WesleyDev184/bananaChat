@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public class ChatHistoryDto {
   private String sender;
+  private String recipient;
   private String content;
   private String type;
   private LocalDateTime timestamp;
@@ -14,6 +15,14 @@ public class ChatHistoryDto {
 
   public ChatHistoryDto(String sender, String content, String type, LocalDateTime timestamp) {
     this.sender = sender;
+    this.content = content;
+    this.type = type;
+    this.timestamp = timestamp;
+  }
+
+  public ChatHistoryDto(String sender, String recipient, String content, String type, LocalDateTime timestamp) {
+    this.sender = sender;
+    this.recipient = recipient;
     this.content = content;
     this.type = type;
     this.timestamp = timestamp;
@@ -50,5 +59,13 @@ public class ChatHistoryDto {
 
   public void setTimestamp(LocalDateTime timestamp) {
     this.timestamp = timestamp;
+  }
+
+  public String getRecipient() {
+    return recipient;
+  }
+
+  public void setRecipient(String recipient) {
+    this.recipient = recipient;
   }
 }

@@ -12,6 +12,7 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import com.bananachat.backend.model.ChatMessage;
 import com.bananachat.backend.service.ChatHistoryService;
+import com.bananachat.backend.service.OnlineUsersService;
 
 @Component
 public class WebSocketEventListener {
@@ -23,6 +24,9 @@ public class WebSocketEventListener {
 
   @Autowired
   private ChatHistoryService chatHistoryService;
+
+  @Autowired
+  private OnlineUsersService onlineUsersService;
 
   @EventListener
   public void handleWebSocketConnectListener(SessionConnectedEvent event) {
@@ -41,6 +45,9 @@ public class WebSocketEventListener {
 
     if (username != null) {
       LOGGER.info("Usuário desconectado: {}", username);
+
+      // Remove o usuário da lista de usuários online
+      onlineUsersService.removeUser(username);
 
       ChatMessage chatMessage = new ChatMessage();
       chatMessage.setType(ChatMessage.MessageType.LEAVE);

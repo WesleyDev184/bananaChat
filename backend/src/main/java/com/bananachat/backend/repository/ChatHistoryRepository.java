@@ -29,4 +29,20 @@ public interface ChatHistoryRepository extends JpaRepository<ChatHistory, Long> 
    * Busca mensagens por tipo
    */
   List<ChatHistory> findByTypeOrderByTimestampAsc(ChatHistory.MessageType type);
+
+  /**
+   * Busca mensagens privadas entre dois usuários
+   */
+  @Query("SELECT c FROM ChatHistory c WHERE " +
+      "((c.sender = :user1 AND c.recipient = :user2) OR " +
+      " (c.sender = :user2 AND c.recipient = :user1)) " +
+      "AND c.recipient IS NOT NULL " +
+      "ORDER BY c.timestamp ASC")
+  List<ChatHistory> findPrivateMessagesBetweenUsers(String user1, String user2);
+
+  /**
+   * Busca mensagens públicas (sem recipient)
+   */
+  @Query("SELECT c FROM ChatHistory c WHERE c.recipient IS NULL ORDER BY c.timestamp ASC")
+  List<ChatHistory> findPublicMessagesOrderByTimestampAsc();
 }

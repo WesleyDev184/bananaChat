@@ -11,6 +11,7 @@ import org.springframework.stereotype.Controller;
 
 import com.bananachat.backend.model.ChatMessage;
 import com.bananachat.backend.service.ChatHistoryService;
+import com.bananachat.backend.service.OnlineUsersService;
 
 @Controller
 public class ChatController {
@@ -22,6 +23,9 @@ public class ChatController {
 
     @Autowired
     private ChatHistoryService chatHistoryService;
+
+    @Autowired
+    private OnlineUsersService onlineUsersService;
 
     /**
      * Manipula o envio de mensagens de chat.
@@ -61,10 +65,36 @@ public class ChatController {
             LOGGER.warn("Não foi possível adicionar username à sessão: {}", e.getMessage());
         }
 
+        // Adiciona o usuário à lista de usuários online
+        onlineUsersService.addUser(chatMessage.getSender());
+
         // Salva a mensagem no histórico
         chatHistoryService.saveMessage(chatMessage);
 
         // Envia diretamente para todos os clientes conectados
         messagingTemplate.convertAndSend("/topic/public", chatMessage);
+    }
+
+    /**
+     * Manipula o envio de mensagens privadas.
+     * Recebe mensagens do cliente via WebSocket no destino
+     * "/app/chat.sendPrivateMessage".
+     *
+     * @param chatMessage A mensagem privada recebida do cliente.
+     */
+    @MessageMapping("/chat.sendPrivateMessage")
+    public void sendPrivateMessage(@Payload ChatMessage chatMessage) {
+        LOGGER.info("Mensagem privada recebida: {} -> {}: {}",
+                chatMessage.getSender(), chatMessage.getRecipient(), chatMessage.getContent());
+
+        // Salva a mensagem no histórico
+        chatHistoryService.saveMessage(chatMessage);
+
+        // Envia para a queue privada do destinatário
+        if (chatMessage.getRecipient() != null) {
+            String privateQueue = "/queue/private." + chatMessage.getRecipient();
+            messagingTemplate.convertAndSend(privateQueue, chatMessage);
+            LOGGER.info("Mensagem enviada para queue: {}", privateQueue);
+        }
     }
 }

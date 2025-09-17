@@ -8,6 +8,7 @@ public class ChatMessage implements Serializable {
 
     private String content;
     private String sender;
+    private String recipient; // Para mensagens privadas
     private MessageType type;
     private LocalDateTime timestamp;
 
@@ -27,6 +28,15 @@ public class ChatMessage implements Serializable {
         this();
         this.content = content;
         this.sender = sender;
+        this.type = type;
+    }
+
+    // Construtor com parâmetros incluindo recipient
+    public ChatMessage(String content, String sender, String recipient, MessageType type) {
+        this();
+        this.content = content;
+        this.sender = sender;
+        this.recipient = recipient;
         this.type = type;
     }
 
@@ -61,5 +71,13 @@ public class ChatMessage implements Serializable {
 
     public void setTimestamp(LocalDateTime timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public String getRecipient() {
+        return recipient;
+    }
+
+    public void setRecipient(String recipient) {
+        this.recipient = recipient;
     }
 }

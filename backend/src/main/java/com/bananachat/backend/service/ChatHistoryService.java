@@ -31,6 +31,7 @@ public class ChatHistoryService {
       ChatHistory.MessageType historyType = convertMessageType(chatMessage.getType());
       ChatHistory chatHistory = new ChatHistory(
           chatMessage.getSender(),
+          chatMessage.getRecipient(),
           chatMessage.getContent(),
           historyType);
 
@@ -79,6 +80,7 @@ public class ChatHistoryService {
   private ChatHistoryDto convertToDto(ChatHistory chatHistory) {
     return new ChatHistoryDto(
         chatHistory.getSender(),
+        chatHistory.getRecipient(),
         chatHistory.getContent(),
         chatHistory.getType().name(),
         chatHistory.getTimestamp());
@@ -97,6 +99,36 @@ public class ChatHistoryService {
         return ChatHistory.MessageType.LEAVE;
       default:
         return ChatHistory.MessageType.CHAT;
+    }
+  }
+
+  /**
+   * Busca mensagens privadas entre dois usuários
+   */
+  public List<ChatHistoryDto> getPrivateMessages(String user1, String user2) {
+    try {
+      List<ChatHistory> privateMessages = chatHistoryRepository.findPrivateMessagesBetweenUsers(user1, user2);
+      return privateMessages.stream()
+          .map(this::convertToDto)
+          .collect(Collectors.toList());
+    } catch (Exception e) {
+      LOGGER.error("Erro ao buscar mensagens privadas: ", e);
+      return List.of();
+    }
+  }
+
+  /**
+   * Busca histórico de mensagens públicas (sem recipient)
+   */
+  public List<ChatHistoryDto> getPublicChatHistory() {
+    try {
+      List<ChatHistory> history = chatHistoryRepository.findPublicMessagesOrderByTimestampAsc();
+      return history.stream()
+          .map(this::convertToDto)
+          .collect(Collectors.toList());
+    } catch (Exception e) {
+      LOGGER.error("Erro ao buscar histórico público: ", e);
+      return List.of();
     }
   }
 }

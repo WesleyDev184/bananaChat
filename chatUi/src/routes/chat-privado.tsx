@@ -11,8 +11,8 @@ import SockJS from "sockjs-client";
 const WEBSOCKET_URL = "http://localhost:8080/ws-chat";
 const API_BASE_URL = "http://localhost:8080/api";
 
-export const Route = createFileRoute("/teste")({
-  component: Chat,
+export const Route = createFileRoute("/chat-privado")({
+  component: PrivateChat,
 });
 
 type ChatMessage = {
@@ -34,7 +34,7 @@ type ChatHistoryDto = {
 
 type ChatType = "global" | "private";
 
-function Chat() {
+function PrivateChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [connectionStatus, setConnectionStatus] =
     useState<string>("Desconectado");
@@ -51,63 +51,11 @@ function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // useEffect para converter mensagens "novas" para mostrarem o horário real após 1 minuto
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMessages((prevMessages) => {
-        const updatedMessages = prevMessages.map((msg) => {
-          // Se a mensagem está marcada como nova e tem mais de 1 minuto
-          if (msg.isNewMessage && msg.timestamp) {
-            const messageTime = new Date(msg.timestamp);
-            const now = new Date();
-            const diffInMinutes =
-              (now.getTime() - messageTime.getTime()) / (1000 * 60);
-
-            // Se passou mais de 1 minuto, remove a flag de nova
-            if (diffInMinutes > 1) {
-              return { ...msg, isNewMessage: false };
-            }
-          }
-          return msg;
-        });
-
-        // Só atualiza se houve mudanças
-        const hasChanges = updatedMessages.some(
-          (msg, index) => msg.isNewMessage !== prevMessages[index].isNewMessage
-        );
-
-        return hasChanges ? updatedMessages : prevMessages;
-      });
-    }, 10000); // Verifica a cada 10 segundos
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Função para ordenar mensagens por timestamp
-  const sortMessagesByTimestamp = useCallback(
-    (messages: ChatMessage[]): ChatMessage[] => {
-      return [...messages].sort((a, b) => {
-        // Se uma mensagem não tem timestamp, coloca ela no final
-        if (!a.timestamp && !b.timestamp) return 0;
-        if (!a.timestamp) return 1;
-        if (!b.timestamp) return -1;
-
-        // Compara os timestamps
-        const dateA = new Date(a.timestamp);
-        const dateB = new Date(b.timestamp);
-
-        return dateA.getTime() - dateB.getTime();
-      });
-    },
-    []
-  );
-
   // Auto scroll para a última mensagem
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-    // Fallback: scroll direto no container se a ref não funcionar
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
         "[data-radix-scroll-area-viewport]"
@@ -122,81 +70,9 @@ function Chat() {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       scrollToBottom();
-    }, 100); // Pequeno delay para garantir que o DOM foi atualizado
-
+    }, 100);
     return () => clearTimeout(timeoutId);
   }, [messages, scrollToBottom]);
-
-  // Função para recarregar histórico manualmente
-  const refreshHistory = async () => {
-    const historyMessages = await fetchChatHistory(selectedChat);
-    // Garante que o histórico está ordenado
-    const sortedHistory = sortMessagesByTimestamp(historyMessages);
-    setMessages(sortedHistory);
-    // Força o scroll após atualizar manualmente
-    setTimeout(() => scrollToBottom(), 150);
-  };
-
-  // Atualização automática do histórico a cada 30 segundos quando o usuário está no chat
-  useEffect(() => {
-    if (!isJoined) return;
-
-    const intervalId = setInterval(async () => {
-      console.log("Atualizando histórico automaticamente...");
-      setIsAutoUpdating(true);
-      try {
-        const latestHistory = await fetchChatHistory(selectedChat);
-        setMessages((prevMessages) => {
-          // Verifica se há novas mensagens para evitar atualizações desnecessárias
-          if (latestHistory.length !== prevMessages.length) {
-            console.log("Novas mensagens encontradas, atualizando...");
-            // Garante que as mensagens estão ordenadas
-            const sortedHistory = sortMessagesByTimestamp(latestHistory);
-            // Força o scroll após a atualização
-            setTimeout(() => scrollToBottom(), 150);
-            return sortedHistory;
-          }
-          return prevMessages;
-        });
-      } catch (error) {
-        console.error("Erro na atualização automática do histórico:", error);
-      } finally {
-        setIsAutoUpdating(false);
-      }
-    }, 30000); // 30 segundos
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [isJoined, selectedChat, sortMessagesByTimestamp, scrollToBottom]);
-
-  // Atualiza histórico quando a janela volta ao foco
-  useEffect(() => {
-    if (!isJoined) return;
-
-    const handleFocus = async () => {
-      console.log("Janela voltou ao foco, atualizando histórico...");
-      setIsAutoUpdating(true);
-      try {
-        const latestHistory = await fetchChatHistory(selectedChat);
-        // Garante que as mensagens estão ordenadas
-        const sortedHistory = sortMessagesByTimestamp(latestHistory);
-        setMessages(sortedHistory);
-        // Força o scroll após carregar o histórico
-        setTimeout(() => scrollToBottom(), 150);
-      } catch (error) {
-        console.error("Erro ao atualizar histórico no foco:", error);
-      } finally {
-        setIsAutoUpdating(false);
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [isJoined, selectedChat, sortMessagesByTimestamp, scrollToBottom]);
 
   // Buscar usuários online
   const fetchOnlineUsers = async () => {
@@ -218,7 +94,7 @@ function Chat() {
 
   // Buscar histórico de chat
   const fetchChatHistory = async (
-    chatType: ChatType | string = "global"
+    chatType: ChatType | string
   ): Promise<ChatMessage[]> => {
     try {
       setIsLoadingHistory(true);
@@ -240,21 +116,23 @@ function Chat() {
       const history: ChatHistoryDto[] = await response.json();
       console.log("Histórico recebido:", history);
 
-      // Converte o formato do histórico para o formato das mensagens
       const convertedMessages: ChatMessage[] = history.map((item) => ({
         sender: item.sender,
         recipient: item.recipient,
         content: item.content,
         type: item.type as "CHAT" | "JOIN" | "LEAVE",
         timestamp: item.timestamp,
-        isNewMessage: false, // Mensagens do histórico não são novas
+        isNewMessage: false,
       }));
 
-      // Ordena as mensagens por timestamp
-      const sortedMessages = sortMessagesByTimestamp(convertedMessages);
-
-      console.log("Mensagens convertidas e ordenadas:", sortedMessages);
-      return sortedMessages;
+      return convertedMessages.sort((a, b) => {
+        if (!a.timestamp && !b.timestamp) return 0;
+        if (!a.timestamp) return 1;
+        if (!b.timestamp) return -1;
+        return (
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+      });
     } catch (error) {
       console.error("Erro ao buscar histórico:", error);
       return [];
@@ -291,9 +169,8 @@ function Chat() {
                 if (selectedChat === "global") {
                   setMessages((prev) => {
                     const newMessages = [...prev, receivedMessage];
-                    const sortedMessages = sortMessagesByTimestamp(newMessages);
                     setTimeout(() => scrollToBottom(), 100);
-                    return sortedMessages;
+                    return newMessages;
                   });
                 }
               } catch (error) {
@@ -326,7 +203,7 @@ function Chat() {
         stompClient.current.deactivate();
       }
     };
-  }, [selectedChat, scrollToBottom, sortMessagesByTimestamp]);
+  }, [selectedChat, scrollToBottom]);
 
   // Subscribir à queue privada quando o usuário entrar
   useEffect(() => {
@@ -349,9 +226,8 @@ function Chat() {
             if (selectedChat === receivedMessage.sender) {
               setMessages((prev) => {
                 const newMessages = [...prev, receivedMessage];
-                const sortedMessages = sortMessagesByTimestamp(newMessages);
                 setTimeout(() => scrollToBottom(), 100);
-                return sortedMessages;
+                return newMessages;
               });
             }
           } catch (error) {
@@ -370,7 +246,6 @@ function Chat() {
     username,
     selectedChat,
     scrollToBottom,
-    sortMessagesByTimestamp,
   ]);
 
   // Carregar histórico quando mudar o chat selecionado
@@ -406,15 +281,6 @@ function Chat() {
       return;
     }
 
-    // Atualiza o histórico automaticamente quando o usuário entra
-    console.log("Atualizando histórico antes de entrar no chat...");
-    const latestHistory = await fetchChatHistory(selectedChat);
-    // Garante que o histórico está ordenado
-    const sortedHistory = sortMessagesByTimestamp(latestHistory);
-    setMessages(sortedHistory);
-    // Força o scroll após carregar o histórico inicial
-    setTimeout(() => scrollToBottom(), 200);
-
     const joinMessage: ChatMessage = {
       sender: username,
       content: `${username} entrou no chat`,
@@ -433,25 +299,6 @@ function Chat() {
     } catch (error) {
       console.error("Erro ao entrar no chat:", error);
     }
-  };
-
-  // Função para enviar mensagem de teste
-  const sendTestMessage = () => {
-    const testMessage: ChatMessage = {
-      sender: "Sistema",
-      content: "Mensagem de teste local",
-      type: "CHAT",
-      timestamp: new Date().toISOString(),
-      isNewMessage: true,
-    };
-
-    console.log("Adicionando mensagem de teste:", testMessage);
-    setMessages((prev) => {
-      const newMessages = [...prev, testMessage];
-      const sortedMessages = sortMessagesByTimestamp(newMessages);
-      setTimeout(() => scrollToBottom(), 100);
-      return sortedMessages;
-    });
   };
 
   // Enviar mensagem
@@ -516,7 +363,7 @@ function Chat() {
     setSelectedChat("global");
   };
 
-  // Lidar com Enter no input
+  // Lidar com Enter
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -528,22 +375,15 @@ function Chat() {
     }
   };
 
-  // Renderiza mensagem baseada no tipo
+  // Renderizar mensagem
   const renderMessage = (msg: ChatMessage, idx: number) => {
-    console.log(`Renderizando mensagem ${idx}:`, msg);
     const isSystemMessage = msg.type === "JOIN" || msg.type === "LEAVE";
     const isOwnMessage = msg.sender === username && msg.type === "CHAT";
 
-    // Formatar timestamp
     const formatTimestamp = (timestamp?: string, isNewMessage?: boolean) => {
       if (!timestamp) return "";
+      if (isNewMessage) return "agora";
 
-      // Se é uma mensagem nova, mostra "agora"
-      if (isNewMessage) {
-        return "agora";
-      }
-
-      // Se é do histórico, mostra o tempo normal
       try {
         const date = new Date(timestamp);
         return date.toLocaleTimeString("pt-BR", {
@@ -554,10 +394,6 @@ function Chat() {
         return "";
       }
     };
-
-    console.log(
-      `isSystemMessage: ${isSystemMessage}, isOwnMessage: ${isOwnMessage}, username: ${username}`
-    );
 
     return (
       <li
@@ -602,13 +438,13 @@ function Chat() {
     );
   };
 
-  // Se o usuário ainda não entrou no chat
+  // Se não entrou no chat ainda
   if (!isJoined) {
     return (
       <div className="h-full bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
         <div className="bg-gray-800 border border-gray-700 p-8 rounded-lg shadow-lg max-w-md w-full">
           <h1 className="text-2xl font-bold text-center mb-6 text-white">
-            🍌 BananaChat
+            🍌 BananaChat Privado
           </h1>
 
           {isLoadingHistory && (
@@ -669,7 +505,7 @@ function Chat() {
     );
   }
 
-  // Interface principal do chat com sidebar
+  // Interface principal do chat privado
   return (
     <div className="h-full bg-gradient-to-br from-gray-900 to-gray-800">
       <div className="container mx-auto max-w-6xl h-full flex">
@@ -809,25 +645,6 @@ function Chat() {
 
               {/* Input de mensagem */}
               <div className="bg-gray-800 border-t border-gray-700 p-4">
-                <div className="flex space-x-2 mb-2">
-                  <Button
-                    onClick={sendTestMessage}
-                    variant="outline"
-                    className="text-xs px-2 py-1 text-gray-300 border-gray-600 hover:bg-gray-700"
-                  >
-                    Teste Local
-                  </Button>
-                  <Button
-                    onClick={refreshHistory}
-                    variant="outline"
-                    className="text-xs px-2 py-1 text-gray-300 border-gray-600 hover:bg-gray-700"
-                    disabled={isLoadingHistory || isAutoUpdating}
-                  >
-                    {isLoadingHistory || isAutoUpdating
-                      ? "Carregando..."
-                      : "🔄 Sincronizar Agora"}
-                  </Button>
-                </div>
                 <div className="flex space-x-2">
                   <Input
                     type="text"

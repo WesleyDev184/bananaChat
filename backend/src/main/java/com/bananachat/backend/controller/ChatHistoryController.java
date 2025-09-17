@@ -41,4 +41,25 @@ public class ChatHistoryController {
     List<ChatHistoryDto> recentMessages = chatHistoryService.getRecentMessages(page, size);
     return ResponseEntity.ok(recentMessages);
   }
+
+  /**
+   * Endpoint para buscar histórico público (sem mensagens privadas)
+   */
+  @GetMapping("/history/public")
+  public ResponseEntity<List<ChatHistoryDto>> getPublicChatHistory() {
+    List<ChatHistoryDto> history = chatHistoryService.getPublicChatHistory();
+    return ResponseEntity.ok(history);
+  }
+
+  /**
+   * Endpoint para buscar mensagens privadas entre dois usuários
+   */
+  @GetMapping("/history/private")
+  public ResponseEntity<List<ChatHistoryDto>> getPrivateMessages(
+      @RequestParam String user1,
+      @RequestParam String user2) {
+
+    List<ChatHistoryDto> privateMessages = chatHistoryService.getPrivateMessages(user1, user2);
+    return ResponseEntity.ok(privateMessages);
+  }
 }

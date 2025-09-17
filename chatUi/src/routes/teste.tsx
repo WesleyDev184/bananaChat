@@ -45,7 +45,6 @@ function Chat() {
   const [isAutoUpdating, setIsAutoUpdating] = useState<boolean>(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [selectedChat, setSelectedChat] = useState<ChatType | string>("global");
-  const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(false);
 
   const stompClient = useRef<Client | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -198,24 +197,6 @@ function Chat() {
     };
   }, [isJoined, selectedChat, sortMessagesByTimestamp, scrollToBottom]);
 
-  // Buscar usuários online
-  const fetchOnlineUsers = async () => {
-    try {
-      setIsLoadingUsers(true);
-      const response = await fetch(`${API_BASE_URL}/users/online`);
-      if (!response.ok) {
-        throw new Error(`Erro HTTP: ${response.status}`);
-      }
-      const users: string[] = await response.json();
-      setOnlineUsers(users.filter((user) => user !== username)); // Remove o próprio usuário
-    } catch (error) {
-      console.error("Erro ao buscar usuários online:", error);
-      setOnlineUsers([]);
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
-
   // Buscar histórico de chat
   const fetchChatHistory = async (
     chatType: ChatType | string = "global"
@@ -287,7 +268,53 @@ function Chat() {
                 }
                 receivedMessage.isNewMessage = true;
 
-                // Só adiciona se estivermos no chat global
+                // Atualizar lista de usuários online baseado em mensagens JOIN/LEAVE
+                // IMPORTANTE: Isso SEMPRE é processado, independente do chat selecionado
+                if (receivedMessage.type === "JOIN") {
+                  // Para outros usuários, adiciona à lista
+                  if (receivedMessage.sender !== username) {
+                    setOnlineUsers((prev) => {
+                      if (!prev.includes(receivedMessage.sender)) {
+                        console.log(
+                          "✅ Usuário entrou:",
+                          receivedMessage.sender
+                        );
+                        return [...prev, receivedMessage.sender].sort();
+                      }
+                      return prev;
+                    });
+                  } else {
+                    // Se é o próprio usuário reconectando, sincroniza a lista
+                    console.log(
+                      "🔄 Reconexão detectada, sincronizando usuários..."
+                    );
+                    setTimeout(async () => {
+                      try {
+                        const response = await fetch(
+                          `${API_BASE_URL}/users/online`
+                        );
+                        if (response.ok) {
+                          const users: string[] = await response.json();
+                          setOnlineUsers(
+                            users.filter((user) => user !== username).sort()
+                          );
+                        }
+                      } catch (error) {
+                        console.error("Erro na sincronização:", error);
+                      }
+                    }, 1000);
+                  }
+                } else if (receivedMessage.type === "LEAVE") {
+                  setOnlineUsers((prev) => {
+                    const filtered = prev.filter(
+                      (user) => user !== receivedMessage.sender
+                    );
+                    console.log("❌ Usuário saiu:", receivedMessage.sender);
+                    return filtered;
+                  });
+                }
+
+                // Só adiciona às MENSAGENS se estivermos no chat global
                 if (selectedChat === "global") {
                   setMessages((prev) => {
                     const newMessages = [...prev, receivedMessage];
@@ -326,7 +353,7 @@ function Chat() {
         stompClient.current.deactivate();
       }
     };
-  }, [selectedChat, scrollToBottom, sortMessagesByTimestamp]);
+  }, [scrollToBottom, sortMessagesByTimestamp]); // Removido selectedChat das dependências!
 
   // Subscribir à queue privada quando o usuário entrar
   useEffect(() => {
@@ -385,11 +412,43 @@ function Chat() {
     }
   }, [selectedChat, isJoined]);
 
-  // Buscar usuários online periodicamente
+  // Sincronização periódica leve dos usuários online (a cada 30s)
   useEffect(() => {
-    if (isJoined) {
-      fetchOnlineUsers();
-      const interval = setInterval(fetchOnlineUsers, 10000); // A cada 10 segundos
+    if (isJoined && username) {
+      const syncUsers = async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/users/online`);
+          if (response.ok) {
+            const users: string[] = await response.json();
+            const filteredUsers = users.filter((user) => user !== username);
+
+            // Só atualiza se houver diferença para evitar re-renders desnecessários
+            setOnlineUsers((prevUsers) => {
+              const prevSet = new Set(prevUsers);
+              const newSet = new Set(filteredUsers);
+
+              if (
+                prevSet.size !== newSet.size ||
+                [...prevSet].some((user) => !newSet.has(user))
+              ) {
+                console.log(
+                  "✅ Lista de usuários online atualizada:",
+                  filteredUsers
+                );
+                return filteredUsers.sort();
+              }
+              return prevUsers;
+            });
+          }
+        } catch (error) {
+          console.error("Erro na sincronização de usuários:", error);
+        }
+      };
+
+      // Sincroniza imediatamente e depois a cada 30 segundos
+      syncUsers();
+      const interval = setInterval(syncUsers, 30000);
+
       return () => clearInterval(interval);
     }
   }, [isJoined, username]);
@@ -424,12 +483,55 @@ function Chat() {
     };
 
     try {
+      // Primeiro envia a mensagem JOIN
+      console.log("📤 Enviando mensagem JOIN:", joinMessage);
       stompClient.current.publish({
         destination: "/app/chat.addUser",
         body: JSON.stringify(joinMessage),
       });
+
       setIsJoined(true);
-      console.log("Usuário entrou no chat:", username);
+      console.log("✅ Usuário entrou no chat:", username);
+
+      // Depois carrega lista inicial de usuários online
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/users/online`);
+          if (response.ok) {
+            const users: string[] = await response.json();
+
+            // Garante que o usuário atual está na lista do backend
+            if (!users.includes(username)) {
+              console.log(
+                "⚠️ PROBLEMA: Usuário",
+                username,
+                "não encontrado na lista do backend!"
+              );
+              console.log("⚠️ Lista do backend:", users);
+              console.log(
+                "⚠️ Isso indica que a mensagem JOIN pode não ter chegado!"
+              );
+            } else {
+              console.log(
+                "✅ Usuário",
+                username,
+                "está corretamente na lista do backend"
+              );
+            }
+
+            const sortedUsers = users
+              .filter((user) => user !== username)
+              .sort();
+            setOnlineUsers(sortedUsers);
+            console.log(
+              "📋 Lista inicial de usuários online carregada:",
+              sortedUsers
+            );
+          }
+        } catch (error) {
+          console.error("Erro ao carregar usuários online:", error);
+        }
+      }, 1500); // Aumentado para 1.5s para dar tempo ao backend
     } catch (error) {
       console.error("Erro ao entrar no chat:", error);
     }
@@ -692,7 +794,9 @@ function Chat() {
           <div className="flex-1 overflow-y-auto">
             {/* Chat Global */}
             <div
-              onClick={() => setSelectedChat("global")}
+              onClick={() => {
+                setSelectedChat("global");
+              }}
               className={`p-4 border-b border-gray-700 cursor-pointer hover:bg-gray-700 ${
                 selectedChat === "global" ? "bg-gray-700" : ""
               }`}
@@ -715,11 +819,7 @@ function Chat() {
               Usuários Online ({onlineUsers.length})
             </div>
 
-            {isLoadingUsers ? (
-              <div className="p-4 text-center text-gray-400">
-                Carregando usuários...
-              </div>
-            ) : onlineUsers.length === 0 ? (
+            {onlineUsers.length === 0 ? (
               <div className="p-4 text-center text-gray-400">
                 Nenhum usuário online
               </div>
@@ -727,7 +827,10 @@ function Chat() {
               onlineUsers.map((user) => (
                 <div
                   key={user}
-                  onClick={() => setSelectedChat(user)}
+                  onClick={() => {
+                    console.log("� Mudando para chat privado com:", user);
+                    setSelectedChat(user);
+                  }}
                   className={`p-4 border-b border-gray-700 cursor-pointer hover:bg-gray-700 ${
                     selectedChat === user ? "bg-gray-700" : ""
                   }`}

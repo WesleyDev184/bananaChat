@@ -37,11 +37,16 @@ public class ChatController {
     public void sendMessage(@Payload ChatMessage chatMessage) {
         LOGGER.info("Mensagem recebida via WebSocket: {}", chatMessage.getContent());
 
+        // Garante que o timestamp seja sempre definido no servidor
+        chatMessage.setTimestamp(java.time.LocalDateTime.now());
+
         // Salva a mensagem no histórico
         chatHistoryService.saveMessage(chatMessage);
 
         // Envia diretamente para todos os clientes conectados
         messagingTemplate.convertAndSend("/topic/public", chatMessage);
+
+        LOGGER.info("Mensagem enviada com timestamp: {}", chatMessage.getTimestamp());
     }
 
     /**
@@ -54,6 +59,9 @@ public class ChatController {
     @MessageMapping("/chat.addUser")
     public void addUser(@Payload ChatMessage chatMessage, SimpMessageHeaderAccessor headerAccessor) {
         LOGGER.info("Novo usuário entrando no chat: {}", chatMessage.getSender());
+
+        // Garante que o timestamp seja sempre definido no servidor
+        chatMessage.setTimestamp(java.time.LocalDateTime.now());
 
         // Adiciona o nome de usuário na sessão do WebSocket
         try {
@@ -73,6 +81,8 @@ public class ChatController {
 
         // Envia diretamente para todos os clientes conectados
         messagingTemplate.convertAndSend("/topic/public", chatMessage);
+
+        LOGGER.info("Usuário adicionado com timestamp: {}", chatMessage.getTimestamp());
     }
 
     /**
@@ -87,6 +97,9 @@ public class ChatController {
         LOGGER.info("Mensagem privada recebida: {} -> {}: {}",
                 chatMessage.getSender(), chatMessage.getRecipient(), chatMessage.getContent());
 
+        // Garante que o timestamp seja sempre definido no servidor
+        chatMessage.setTimestamp(java.time.LocalDateTime.now());
+
         // Salva a mensagem no histórico
         chatHistoryService.saveMessage(chatMessage);
 
@@ -94,7 +107,8 @@ public class ChatController {
         if (chatMessage.getRecipient() != null) {
             String privateQueue = "/queue/private." + chatMessage.getRecipient();
             messagingTemplate.convertAndSend(privateQueue, chatMessage);
-            LOGGER.info("Mensagem enviada para queue: {}", privateQueue);
+            LOGGER.info("Mensagem privada enviada para queue: {} com timestamp: {}",
+                    privateQueue, chatMessage.getTimestamp());
         }
     }
 }

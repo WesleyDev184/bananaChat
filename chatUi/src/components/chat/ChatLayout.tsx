@@ -316,7 +316,7 @@ export default function ChatLayout() {
   // Função para ordenar mensagens por timestamp
   const sortMessagesByTimestamp = useCallback(
     (messages: ChatMessage[]): ChatMessage[] => {
-      return [...messages].sort((a, b) => {
+      const sorted = [...messages].sort((a, b) => {
         if (!a.timestamp && !b.timestamp) return 0;
         if (!a.timestamp) return 1;
         if (!b.timestamp) return -1;
@@ -335,6 +335,18 @@ export default function ChatLayout() {
           return 0;
         }
       });
+
+      console.log(
+        "📊 Mensagens ordenadas:",
+        sorted.map((s) => ({
+          sender: s.sender,
+          content: s.content.substring(0, 20),
+          timestamp: s.timestamp,
+          date: new Date(s.timestamp || 0).toLocaleString(),
+        }))
+      );
+
+      return sorted;
     },
     []
   );
@@ -794,6 +806,17 @@ export default function ChatLayout() {
     if (isJoined) {
       const loadHistory = async () => {
         const history = await fetchChatHistory(selectedChat);
+        console.log(
+          "🔍 História carregada para",
+          selectedChat,
+          ":",
+          history.map((h) => ({
+            sender: h.sender,
+            content: h.content.substring(0, 30),
+            timestamp: h.timestamp,
+            timestampDate: new Date(h.timestamp || 0).toLocaleString(),
+          }))
+        );
         setMessages(history);
         setTimeout(() => scrollToBottom(), 150);
       };

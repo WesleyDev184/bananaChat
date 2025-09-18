@@ -9,8 +9,10 @@ import type {
   ConnectionStatus,
   Conversation,
 } from "@/components/chat/types";
+import { useChatState } from "@/hooks/useChatState";
 import { Client } from "@stomp/stompjs";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import type React from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SockJS from "sockjs-client";
 
 const WEBSOCKET_URL = "http://localhost:8080/ws-chat";
@@ -21,16 +23,93 @@ export default function ChatLayout() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("Desconectado");
-  const [username, setUsername] = useState<string>("");
   const [isJoined, setIsJoined] = useState<boolean>(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
   const [isAutoUpdating, setIsAutoUpdating] = useState<boolean>(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-  const [selectedChat, setSelectedChat] = useState<ChatType | string>("global");
 
   // Refs
   const stompClient = useRef<Client | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Hook customizado que gerencia estado via URL
+  const {
+    selectedChat,
+    setSelectedChat,
+    username,
+    setUsername,
+    autoJoin,
+    filterMessages,
+  } = useChatState();
+
+  // Função joinChat implementação real
+  const joinChat = useCallback(async () => {
+    if (!username.trim()) {
+      alert("Por favor, digite um nome de usuário");
+      return;
+    }
+
+    if (!stompClient.current || !stompClient.current.connected) {
+      alert("Conexão WebSocket não estabelecida");
+      return;
+    }
+
+    const latestHistory = await fetchChatHistory(selectedChat);
+    const sortedHistory = sortMessagesByTimestamp(latestHistory);
+    setMessages(sortedHistory);
+    setTimeout(() => scrollToBottom(), 200);
+
+    // Mensagem de entrada (sem isNewMessage e timestamp)
+    const joinMessage: ChatMessage = {
+      sender: username,
+      content: `${username} entrou no chat`,
+      type: "JOIN",
+    };
+
+    try {
+      console.log("Enviando mensagem JOIN:", joinMessage);
+      stompClient.current.publish({
+        destination: "/app/chat.addUser",
+        body: JSON.stringify(joinMessage),
+      });
+
+      setIsJoined(true);
+      console.log("Usuário entrou no chat:", username);
+
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/users/online`);
+          if (response.ok) {
+            const users: string[] = await response.json();
+            const sortedUsers = users
+              .filter((user) => user !== username)
+              .sort();
+            setOnlineUsers(sortedUsers);
+            console.log(
+              "Lista inicial de usuários online carregada:",
+              sortedUsers
+            );
+          }
+        } catch (error) {
+          console.error("Erro ao carregar usuários online:", error);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error("Erro ao entrar no chat:", error);
+    }
+  }, [username, selectedChat]);
+
+  // Aplicar filtros nas mensagens
+  const filteredMessages = useMemo(() => {
+    return filterMessages(messages);
+  }, [messages, filterMessages]);
+
+  // Auto-join logic
+  useEffect(() => {
+    if (username && autoJoin && !isJoined) {
+      joinChat();
+    }
+  }, [username, autoJoin, isJoined]);
 
   // Função para ordenar mensagens por timestamp (ordem cronológica simples)
   const sortMessagesByTimestamp = useCallback(
@@ -532,63 +611,6 @@ export default function ChatLayout() {
     }
   }, [isJoined, username]);
 
-  // Entrar no chat
-  const joinChat = async () => {
-    if (!username.trim()) {
-      alert("Por favor, digite um nome de usuário");
-      return;
-    }
-
-    if (!stompClient.current || !stompClient.current.connected) {
-      alert("Conexão WebSocket não estabelecida");
-      return;
-    }
-
-    const latestHistory = await fetchChatHistory(selectedChat);
-    const sortedHistory = sortMessagesByTimestamp(latestHistory);
-    setMessages(sortedHistory);
-    setTimeout(() => scrollToBottom(), 200);
-
-    // Mensagem de entrada (sem isNewMessage e timestamp)
-    const joinMessage: ChatMessage = {
-      sender: username,
-      content: `${username} entrou no chat`,
-      type: "JOIN",
-    };
-
-    try {
-      console.log("Enviando mensagem JOIN:", joinMessage);
-      stompClient.current.publish({
-        destination: "/app/chat.addUser",
-        body: JSON.stringify(joinMessage),
-      });
-
-      setIsJoined(true);
-      console.log("Usuário entrou no chat:", username);
-
-      setTimeout(async () => {
-        try {
-          const response = await fetch(`${API_BASE_URL}/users/online`);
-          if (response.ok) {
-            const users: string[] = await response.json();
-            const sortedUsers = users
-              .filter((user) => user !== username)
-              .sort();
-            setOnlineUsers(sortedUsers);
-            console.log(
-              "Lista inicial de usuários online carregada:",
-              sortedUsers
-            );
-          }
-        } catch (error) {
-          console.error("Erro ao carregar usuários online:", error);
-        }
-      }, 1500);
-    } catch (error) {
-      console.error("Erro ao entrar no chat:", error);
-    }
-  };
-
   // Enviar mensagem
   const sendMessage = (messageInput: string) => {
     if (!messageInput.trim()) return;
@@ -663,13 +685,13 @@ export default function ChatLayout() {
       id: "global",
       title: "Chat Global",
       lastMessage:
-        messages.filter((m) => !m.recipient).slice(-1)[0]?.content ||
+        filteredMessages.filter((m) => !m.recipient).slice(-1)[0]?.content ||
         "Seja bem-vindo!",
-      messages: [], // O MessageWindow vai usar messages diretamente
+      messages: [], // O MessageWindow vai usar filteredMessages diretamente
       unreadCount:
         selectedChat === "global"
           ? 0
-          : messages.filter(
+          : filteredMessages.filter(
               (m) => !m.recipient && m.isNewMessage && m.sender !== username
             ).length,
     },
@@ -677,7 +699,7 @@ export default function ChatLayout() {
       id: user,
       title: user,
       lastMessage:
-        messages
+        filteredMessages
           .filter(
             (m) =>
               (m.sender === user && m.recipient === username) ||
@@ -689,7 +711,7 @@ export default function ChatLayout() {
       unreadCount:
         selectedChat === user
           ? 0
-          : messages.filter(
+          : filteredMessages.filter(
               (m) =>
                 m.sender === user && m.recipient === username && m.isNewMessage
             ).length,
@@ -728,7 +750,7 @@ export default function ChatLayout() {
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="flex-1 min-h-0 overflow-hidden">
           <MessageWindow
-            messages={messages}
+            messages={filteredMessages}
             selectedChat={selectedChat}
             currentUsername={username}
             isAutoUpdating={isAutoUpdating}

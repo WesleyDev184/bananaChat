@@ -37,14 +37,17 @@ public class ChatController {
      */
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(@Payload ChatMessage chatMessage) {
-        LOGGER.info("Mensagem recebida via WebSocket: {}", chatMessage.getContent());
+        long startNanos = System.nanoTime();
+        LOGGER.info("🚀 Mensagem recebida via WebSocket: {}", chatMessage.getContent());
 
         // Garante que o timestamp seja sempre definido no servidor com precisão de
         // nanosegundos
         LocalDateTime now = LocalDateTime.now();
         chatMessage.setTimestamp(now);
 
-        LOGGER.info("Timestamp definido: {} para mensagem: {}", now, chatMessage.getContent());
+        long timestampNanos = System.nanoTime();
+        LOGGER.info("⏰ Timestamp definido: {} (processamento: {}ns) para mensagem: {}",
+                now, timestampNanos - startNanos, chatMessage.getContent());
 
         // Salva a mensagem no histórico
         chatHistoryService.saveMessage(chatMessage);
@@ -52,7 +55,9 @@ public class ChatController {
         // Envia diretamente para todos os clientes conectados
         messagingTemplate.convertAndSend("/topic/public", chatMessage);
 
-        LOGGER.info("Mensagem enviada com timestamp: {}", chatMessage.getTimestamp());
+        long endNanos = System.nanoTime();
+        LOGGER.info("📤 Mensagem enviada com timestamp: {} (tempo total: {}ns)",
+                chatMessage.getTimestamp(), endNanos - startNanos);
     }
 
     /**
@@ -64,13 +69,16 @@ public class ChatController {
      */
     @MessageMapping("/chat.addUser")
     public void addUser(@Payload ChatMessage chatMessage, SimpMessageHeaderAccessor headerAccessor) {
-        LOGGER.info("Novo usuário entrando no chat: {}", chatMessage.getSender());
+        long startNanos = System.nanoTime();
+        LOGGER.info("👤 Novo usuário entrando no chat: {}", chatMessage.getSender());
 
         // Garante que o timestamp seja sempre definido no servidor com precisão
         LocalDateTime now = LocalDateTime.now();
         chatMessage.setTimestamp(now);
 
-        LOGGER.info("Timestamp definido: {} para entrada do usuário: {}", now, chatMessage.getSender());
+        long timestampNanos = System.nanoTime();
+        LOGGER.info("⏰ Timestamp definido: {} (processamento: {}ns) para entrada do usuário: {}",
+                now, timestampNanos - startNanos, chatMessage.getSender());
 
         // Adiciona o nome de usuário na sessão do WebSocket
         try {
@@ -103,14 +111,17 @@ public class ChatController {
      */
     @MessageMapping("/chat.sendPrivateMessage")
     public void sendPrivateMessage(@Payload ChatMessage chatMessage) {
-        LOGGER.info("Mensagem privada recebida: {} -> {}: {}",
+        long startNanos = System.nanoTime();
+        LOGGER.info("🔒 Mensagem privada recebida: {} -> {}: {}",
                 chatMessage.getSender(), chatMessage.getRecipient(), chatMessage.getContent());
 
         // Garante que o timestamp seja sempre definido no servidor com precisão
         LocalDateTime now = LocalDateTime.now();
         chatMessage.setTimestamp(now);
 
-        LOGGER.info("Timestamp definido: {} para mensagem privada: {}", now, chatMessage.getContent());
+        long timestampNanos = System.nanoTime();
+        LOGGER.info("⏰ Timestamp definido: {} (processamento: {}ns) para mensagem privada: {}",
+                now, timestampNanos - startNanos, chatMessage.getContent());
 
         // Salva a mensagem no histórico
         chatHistoryService.saveMessage(chatMessage);
@@ -119,8 +130,10 @@ public class ChatController {
         if (chatMessage.getRecipient() != null) {
             String privateQueue = "/queue/private." + chatMessage.getRecipient();
             messagingTemplate.convertAndSend(privateQueue, chatMessage);
-            LOGGER.info("Mensagem privada enviada para queue: {} com timestamp: {}",
-                    privateQueue, chatMessage.getTimestamp());
+
+            long endNanos = System.nanoTime();
+            LOGGER.info("📤 Mensagem privada enviada para queue: {} com timestamp: {} (tempo total: {}ns)",
+                    privateQueue, chatMessage.getTimestamp(), endNanos - startNanos);
         }
     }
 }

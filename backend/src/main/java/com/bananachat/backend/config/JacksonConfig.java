@@ -25,7 +25,7 @@ public class JacksonConfig {
     JavaTimeModule javaTimeModule = new JavaTimeModule();
 
     // Configura o formato personalizado para LocalDateTime com nanosegundos
-    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS");
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS");
     javaTimeModule.addSerializer(LocalDateTime.class, new LocalDateTimeSerializer(formatter));
 
     mapper.registerModule(javaTimeModule);

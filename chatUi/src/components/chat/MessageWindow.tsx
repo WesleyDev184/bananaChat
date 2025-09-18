@@ -1,6 +1,15 @@
 import type { ChatMessage, ChatType } from "@/components/chat/types";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import React from "react";
+
+interface MessageWindowProps {
+  messages: ChatMessage[];
+  selectedChat: ChatType | string;
+  currentUsername: string;
+  isAutoUpdating: boolean;
+  messagesEndRef: React.RefObject<HTMLDivElement | null>;
+}
 
 export default function MessageWindow({
   messages,
@@ -8,14 +17,8 @@ export default function MessageWindow({
   currentUsername,
   isAutoUpdating,
   messagesEndRef,
-}: {
-  messages: ChatMessage[];
-  selectedChat: ChatType | string;
-  currentUsername: string;
-  isAutoUpdating: boolean;
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  // Filtrar mensagens baseado no chat selecionado
+}: MessageWindowProps) {
+  // Filtra mensagens baseado no chat selecionado
   const filteredMessages = messages.filter((msg) => {
     if (selectedChat === "global") {
       // Chat global: mensagens sem recipient
@@ -29,17 +32,59 @@ export default function MessageWindow({
     }
   });
 
-  // Formatar timestamp
-  const formatTimestamp = (timestamp?: string, isNewMessage?: boolean) => {
+  // Debug: log da ordem final no componente
+  React.useEffect(() => {
+    if (filteredMessages.length > 0) {
+      console.log(
+        `🎯 MessageWindow - ${selectedChat} - Ordem final das mensagens:`,
+        filteredMessages.map((m) => ({
+          type: m.type,
+          content: m.content.substring(0, 25),
+          timestamp: m.timestamp,
+          sender: m.sender,
+        }))
+      );
+    }
+  }, [filteredMessages, selectedChat]);
+
+  // Formatar timestamp com tratamento especial para mensagens de sistema
+  const formatTimestamp = (
+    timestamp?: string,
+    isNewMessage?: boolean,
+    messageType?: string
+  ) => {
     if (!timestamp) return "";
 
     if (isNewMessage) {
+      // Para mensagens de sistema, mostra "agora" por menos tempo
+      if (messageType === "JOIN" || messageType === "LEAVE") {
+        return "agora";
+      }
       return "agora";
     }
 
     try {
       const date = new Date(timestamp);
-      return date.toLocaleTimeString("pt-BR", {
+      const now = new Date();
+      const diffInMinutes = (now.getTime() - date.getTime()) / (1000 * 60);
+
+      // Se foi há menos de 1 minuto, mostra "agora"
+      if (diffInMinutes < 1) {
+        return "agora";
+      }
+
+      // Se foi no mesmo dia, mostra apenas horário
+      if (date.toDateString() === now.toDateString()) {
+        return date.toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
+      // Se foi em outro dia, mostra data e horário
+      return date.toLocaleString("pt-BR", {
+        month: "2-digit",
+        day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -48,29 +93,25 @@ export default function MessageWindow({
     }
   };
 
-  // Renderizar mensagem
+  // Renderizar uma mensagem
   const renderMessage = (msg: ChatMessage, idx: number) => {
+    const isOwnMessage = msg.sender === currentUsername;
     const isSystemMessage = msg.type === "JOIN" || msg.type === "LEAVE";
-    const isOwnMessage = msg.sender === currentUsername && msg.type === "CHAT";
 
     return (
       <div
         key={`${msg.timestamp || Date.now()}-${msg.sender}-${idx}`}
         className={`flex ${
-          isSystemMessage
-            ? "justify-center"
-            : isOwnMessage
-            ? "justify-end"
-            : "justify-start"
-        } mb-3`}
+          isOwnMessage && !isSystemMessage ? "justify-end" : "justify-start"
+        } mb-4`}
       >
         <div
-          className={`max-w-[70%] min-w-[120px] rounded-lg p-3 ${
+          className={`max-w-[70%] rounded-lg p-3 ${
             isSystemMessage
-              ? "bg-muted text-muted-foreground text-center italic text-sm"
+              ? "bg-muted/30 text-muted-foreground mx-auto text-center"
               : isOwnMessage
               ? "bg-primary text-primary-foreground"
-              : "bg-muted text-foreground"
+              : "bg-muted"
           }`}
         >
           {!isSystemMessage && (
@@ -92,7 +133,7 @@ export default function MessageWindow({
                       : "text-muted-foreground"
                   }`}
                 >
-                  {formatTimestamp(msg.timestamp, msg.isNewMessage)}
+                  {formatTimestamp(msg.timestamp, msg.isNewMessage, msg.type)}
                 </div>
               )}
             </div>
@@ -108,7 +149,7 @@ export default function MessageWindow({
 
           {isSystemMessage && msg.timestamp && (
             <div className="text-xs text-muted-foreground/60 mt-2">
-              {formatTimestamp(msg.timestamp, msg.isNewMessage)}
+              {formatTimestamp(msg.timestamp, msg.isNewMessage, msg.type)}
             </div>
           )}
         </div>

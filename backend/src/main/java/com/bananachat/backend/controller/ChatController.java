@@ -1,5 +1,7 @@
 package com.bananachat.backend.controller;
 
+import java.time.LocalDateTime;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,8 +39,12 @@ public class ChatController {
     public void sendMessage(@Payload ChatMessage chatMessage) {
         LOGGER.info("Mensagem recebida via WebSocket: {}", chatMessage.getContent());
 
-        // Garante que o timestamp seja sempre definido no servidor
-        chatMessage.setTimestamp(java.time.LocalDateTime.now());
+        // Garante que o timestamp seja sempre definido no servidor com precisão de
+        // nanosegundos
+        LocalDateTime now = LocalDateTime.now();
+        chatMessage.setTimestamp(now);
+
+        LOGGER.info("Timestamp definido: {} para mensagem: {}", now, chatMessage.getContent());
 
         // Salva a mensagem no histórico
         chatHistoryService.saveMessage(chatMessage);
@@ -60,8 +66,11 @@ public class ChatController {
     public void addUser(@Payload ChatMessage chatMessage, SimpMessageHeaderAccessor headerAccessor) {
         LOGGER.info("Novo usuário entrando no chat: {}", chatMessage.getSender());
 
-        // Garante que o timestamp seja sempre definido no servidor
-        chatMessage.setTimestamp(java.time.LocalDateTime.now());
+        // Garante que o timestamp seja sempre definido no servidor com precisão
+        LocalDateTime now = LocalDateTime.now();
+        chatMessage.setTimestamp(now);
+
+        LOGGER.info("Timestamp definido: {} para entrada do usuário: {}", now, chatMessage.getSender());
 
         // Adiciona o nome de usuário na sessão do WebSocket
         try {
@@ -97,8 +106,11 @@ public class ChatController {
         LOGGER.info("Mensagem privada recebida: {} -> {}: {}",
                 chatMessage.getSender(), chatMessage.getRecipient(), chatMessage.getContent());
 
-        // Garante que o timestamp seja sempre definido no servidor
-        chatMessage.setTimestamp(java.time.LocalDateTime.now());
+        // Garante que o timestamp seja sempre definido no servidor com precisão
+        LocalDateTime now = LocalDateTime.now();
+        chatMessage.setTimestamp(now);
+
+        LOGGER.info("Timestamp definido: {} para mensagem privada: {}", now, chatMessage.getContent());
 
         // Salva a mensagem no histórico
         chatHistoryService.saveMessage(chatMessage);

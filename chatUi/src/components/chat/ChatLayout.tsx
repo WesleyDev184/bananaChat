@@ -32,23 +32,72 @@ export default function ChatLayout() {
   const stompClient = useRef<Client | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Função para ordenar mensagens por timestamp
+  // Função para ordenar mensagens por timestamp (ordem cronológica simples)
   const sortMessagesByTimestamp = useCallback(
     (messages: ChatMessage[]): ChatMessage[] => {
-      return [...messages].sort((a, b) => {
+      const sorted = [...messages].sort((a, b) => {
         if (!a.timestamp && !b.timestamp) return 0;
         if (!a.timestamp) return 1;
         if (!b.timestamp) return -1;
 
-        const dateA = new Date(a.timestamp);
-        const dateB = new Date(b.timestamp);
-        return dateA.getTime() - dateB.getTime();
+        try {
+          const dateA = new Date(a.timestamp);
+          const dateB = new Date(b.timestamp);
+
+          // Verificar se as datas são válidas
+          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+            console.warn("⚠️ Timestamp inválido detectado:", {
+              a: a.timestamp,
+              b: b.timestamp,
+            });
+            return !isNaN(dateA.getTime()) ? -1 : 1;
+          }
+
+          const diff = dateA.getTime() - dateB.getTime();
+
+          // Log para debug quando timestamps são muito próximos
+          if (Math.abs(diff) < 100) {
+            console.log("🔍 Timestamps próximos:", {
+              a: {
+                content: a.content.substring(0, 20),
+                timestamp: a.timestamp,
+                time: dateA.getTime(),
+              },
+              b: {
+                content: b.content.substring(0, 20),
+                timestamp: b.timestamp,
+                time: dateB.getTime(),
+              },
+              diff: diff,
+            });
+          }
+
+          return diff;
+        } catch (error) {
+          console.error("❌ Erro ao comparar timestamps:", error, {
+            a: a.timestamp,
+            b: b.timestamp,
+          });
+          return 0;
+        }
       });
+
+      // Log da ordem final
+      console.log(
+        "📊 Ordem final após sort:",
+        sorted.slice(0, 10).map((m, idx) => ({
+          index: idx,
+          type: m.type,
+          content: m.content.substring(0, 25),
+          timestamp: m.timestamp,
+          parsed: m.timestamp ? new Date(m.timestamp).getTime() : "null",
+        }))
+      );
+
+      return sorted;
     },
     []
-  );
-
-  // Auto scroll para a última mensagem
+  ); // Auto scroll para a última mensagem
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
       // Pequeno delay para garantir que o ScrollArea renderizou
@@ -70,18 +119,36 @@ export default function ChatLayout() {
     return () => clearTimeout(timeoutId);
   }, [messages, scrollToBottom]);
 
-  // Remove flag isNewMessage após 60 segundos
+  // Sistema otimizado de atualização de timestamps
   useEffect(() => {
     const interval = setInterval(() => {
       setMessages((prevMessages) => {
         const now = new Date();
         const updatedMessages = prevMessages.map((msg) => {
           if (msg.isNewMessage && msg.timestamp) {
-            const messageTime = new Date(msg.timestamp);
-            const diffInMinutes =
-              (now.getTime() - messageTime.getTime()) / (1000 * 60);
+            try {
+              const messageTime = new Date(msg.timestamp);
+              const diffInSeconds =
+                (now.getTime() - messageTime.getTime()) / 1000;
 
-            if (diffInMinutes > 1) {
+              // Atualiza mensagens de sistema (JOIN/LEAVE) após 15 segundos
+              // Atualiza mensagens de chat após 60 segundos
+              const thresholdSeconds =
+                msg.type === "JOIN" || msg.type === "LEAVE" ? 15 : 60;
+
+              if (diffInSeconds > thresholdSeconds) {
+                console.log(
+                  `⏰ Atualizando timestamp ${msg.type}: ${msg.content} - ${msg.timestamp}`
+                );
+                return { ...msg, isNewMessage: false };
+              }
+            } catch (error) {
+              console.warn(
+                "⚠️ Erro ao processar timestamp:",
+                msg.timestamp,
+                error
+              );
+              // Se há erro no timestamp, remove o flag para evitar loops
               return { ...msg, isNewMessage: false };
             }
           }
@@ -94,7 +161,7 @@ export default function ChatLayout() {
 
         return hasChanges ? updatedMessages : prevMessages;
       });
-    }, 30000); // Verifica a cada 30 segundos
+    }, 10000); // Verifica a cada 10 segundos (mais responsivo)
 
     return () => clearInterval(interval);
   }, []);
@@ -132,7 +199,15 @@ export default function ChatLayout() {
       }));
 
       const sortedMessages = sortMessagesByTimestamp(convertedMessages);
-      console.log("Mensagens convertidas e ordenadas:", sortedMessages);
+      console.log(
+        "📜 Histórico carregado - Ordem cronológica:",
+        sortedMessages.map((m) => ({
+          type: m.type,
+          content: m.content.substring(0, 30),
+          timestamp: m.timestamp,
+          sender: m.sender,
+        }))
+      );
       return sortedMessages;
     } catch (error) {
       console.error("Erro ao buscar histórico:", error);
@@ -216,21 +291,49 @@ export default function ChatLayout() {
                 // SEMPRE adiciona à lista de mensagens (sem filtro por chat selecionado)
                 // A filtragem será feita no MessageWindow
                 setMessages((prev) => {
-                  // Evita duplicatas verificando se a mensagem já existe
-                  const messageExists = prev.some(
-                    (existingMsg) =>
+                  // Verifica duplicatas de forma mais simples e rigorosa
+                  const messageExists = prev.some((existingMsg) => {
+                    // Compara timestamp, sender e content para evitar duplicatas
+                    return (
+                      existingMsg.timestamp === receivedMessage.timestamp &&
                       existingMsg.sender === receivedMessage.sender &&
                       existingMsg.content === receivedMessage.content &&
-                      existingMsg.timestamp === receivedMessage.timestamp &&
                       existingMsg.type === receivedMessage.type
-                  );
+                    );
+                  });
 
                   if (!messageExists) {
-                    console.log("💬 Adicionando nova mensagem à lista");
+                    console.log(
+                      `💬 Adicionando nova mensagem ${receivedMessage.type}:`,
+                      {
+                        content: receivedMessage.content,
+                        timestamp: receivedMessage.timestamp,
+                        sender: receivedMessage.sender,
+                      }
+                    );
+
                     const newMessages = [...prev, receivedMessage];
-                    return sortMessagesByTimestamp(newMessages);
+                    const sortedMessages = sortMessagesByTimestamp(newMessages);
+
+                    // Log para debug da ordem
+                    console.log(
+                      "📋 Ordem atual das mensagens:",
+                      sortedMessages.map((m) => ({
+                        type: m.type,
+                        content: m.content.substring(0, 20),
+                        timestamp: m.timestamp,
+                      }))
+                    );
+
+                    // Force scroll para novas mensagens
+                    setTimeout(() => scrollToBottom(), 100);
+
+                    return sortedMessages;
                   } else {
-                    console.log("⚠️ Mensagem duplicada ignorada");
+                    console.log(
+                      `⚠️ Mensagem ${receivedMessage.type} duplicada ignorada:`,
+                      receivedMessage.content
+                    );
                   }
                   return prev;
                 });
@@ -319,8 +422,25 @@ export default function ChatLayout() {
               );
 
               if (!messageExists) {
+                console.log("💬 Adicionando mensagem privada:", {
+                  content: receivedMessage.content,
+                  timestamp: receivedMessage.timestamp,
+                  sender: receivedMessage.sender,
+                });
+
                 const newMessages = [...prev, receivedMessage];
                 const sortedMessages = sortMessagesByTimestamp(newMessages);
+
+                // Log para debug da ordem
+                console.log(
+                  "📋 Ordem atual das mensagens (com privada):",
+                  sortedMessages.map((m) => ({
+                    type: m.type,
+                    content: m.content.substring(0, 20),
+                    timestamp: m.timestamp,
+                  }))
+                );
+
                 setTimeout(() => scrollToBottom(), 100);
                 return sortedMessages;
               }

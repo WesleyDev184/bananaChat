@@ -24,8 +24,8 @@ public class JacksonConfig {
     // Registra o módulo JSR310 para Java Time
     JavaTimeModule javaTimeModule = new JavaTimeModule();
 
-    // Configura o formato personalizado para LocalDateTime
-    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
+    // Configura o formato personalizado para LocalDateTime com nanosegundos
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS");
     javaTimeModule.addSerializer(LocalDateTime.class, new LocalDateTimeSerializer(formatter));
 
     mapper.registerModule(javaTimeModule);

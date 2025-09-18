@@ -38,16 +38,36 @@ export default function MessageWindow({
   React.useEffect(() => {
     if (filteredMessages.length > 0) {
       console.log(
-        `🎯 MessageWindow - ${selectedChat} - Ordem final das mensagens:`,
+        `🎯 MessageWindow - ${selectedChat} - Ordem final das mensagens (${filteredMessages.length}):`,
         filteredMessages.map((m) => ({
           type: m.type,
           content: m.content.substring(0, 25),
           timestamp: m.timestamp,
           sender: m.sender,
+          recipient: m.recipient || "público",
+        }))
+      );
+    } else {
+      console.log(
+        `🎯 MessageWindow - ${selectedChat} - Nenhuma mensagem filtrada encontrada`
+      );
+      console.log(`📊 Total de mensagens disponíveis: ${messages.length}`);
+      console.log(
+        `📋 Todas as mensagens:`,
+        messages.map((m) => ({
+          sender: m.sender,
+          recipient: m.recipient || "público",
+          content: m.content.substring(0, 20),
+          matchesFilter:
+            selectedChat === "global"
+              ? !m.recipient
+              : (m.sender === currentUsername &&
+                  m.recipient === selectedChat) ||
+                (m.sender === selectedChat && m.recipient === currentUsername),
         }))
       );
     }
-  }, [filteredMessages, selectedChat]);
+  }, [filteredMessages, selectedChat, messages, currentUsername]);
 
   // Formatar timestamp com tratamento especial para mensagens de sistema
   const formatTimestamp = (

@@ -35,10 +35,24 @@ public class ChatHistoryService {
           chatMessage.getContent(),
           historyType);
 
-      chatHistoryRepository.save(chatHistory);
-      LOGGER.info("Mensagem salva no histórico: {}", chatMessage.getContent());
+      // Define o timestamp da mensagem se disponível
+      if (chatMessage.getTimestamp() != null) {
+        chatHistory.setTimestamp(chatMessage.getTimestamp());
+      }
+
+      ChatHistory savedMessage = chatHistoryRepository.save(chatHistory);
+
+      // Log detalhado para debug
+      if (chatMessage.getRecipient() != null) {
+        LOGGER.info("💾 Mensagem PRIVADA salva no histórico: {} -> {}: {} (ID: {})",
+            chatMessage.getSender(), chatMessage.getRecipient(),
+            chatMessage.getContent(), savedMessage.getId());
+      } else {
+        LOGGER.info("💾 Mensagem PÚBLICA salva no histórico: {}: {} (ID: {})",
+            chatMessage.getSender(), chatMessage.getContent(), savedMessage.getId());
+      }
     } catch (Exception e) {
-      LOGGER.error("Erro ao salvar mensagem no histórico: ", e);
+      LOGGER.error("❌ Erro ao salvar mensagem no histórico: ", e);
     }
   }
 
@@ -107,12 +121,26 @@ public class ChatHistoryService {
    */
   public List<ChatHistoryDto> getPrivateMessages(String user1, String user2) {
     try {
+      LOGGER.info("🔍 Buscando mensagens privadas entre: {} <-> {}", user1, user2);
+
       List<ChatHistory> privateMessages = chatHistoryRepository.findPrivateMessagesBetweenUsers(user1, user2);
+
+      LOGGER.info("📊 Encontradas {} mensagens privadas entre {} e {}",
+          privateMessages.size(), user1, user2);
+
+      // Log detalhado das mensagens encontradas
+      privateMessages.forEach(msg -> {
+        LOGGER.debug("  📝 {} -> {}: {} ({})",
+            msg.getSender(), msg.getRecipient(),
+            msg.getContent().substring(0, Math.min(30, msg.getContent().length())),
+            msg.getTimestamp());
+      });
+
       return privateMessages.stream()
           .map(this::convertToDto)
           .collect(Collectors.toList());
     } catch (Exception e) {
-      LOGGER.error("Erro ao buscar mensagens privadas: ", e);
+      LOGGER.error("❌ Erro ao buscar mensagens privadas entre {} e {}: ", user1, user2, e);
       return List.of();
     }
   }

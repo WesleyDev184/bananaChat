@@ -408,6 +408,8 @@ export default function ChatLayout() {
               destinatario: receivedMessage.recipient,
               conteudo: receivedMessage.content,
               timestamp: receivedMessage.timestamp,
+              chatAtual: selectedChat,
+              usuarioAtual: username,
             });
 
             // SEMPRE adiciona mensagens privadas (sem filtro por chat selecionado)

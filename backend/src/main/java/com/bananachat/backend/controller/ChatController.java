@@ -128,12 +128,19 @@ public class ChatController {
 
         // Envia para a queue privada do destinatário
         if (chatMessage.getRecipient() != null) {
-            String privateQueue = "/queue/private." + chatMessage.getRecipient();
-            messagingTemplate.convertAndSend(privateQueue, chatMessage);
+            String privateQueueRecipient = "/queue/private." + chatMessage.getRecipient();
+            messagingTemplate.convertAndSend(privateQueueRecipient, chatMessage);
+            LOGGER.info("📤 Mensagem privada enviada para destinatário: {}", privateQueueRecipient);
+
+            // IMPORTANTE: Também envia para o remetente para que ele veja sua própria
+            // mensagem
+            String privateQueueSender = "/queue/private." + chatMessage.getSender();
+            messagingTemplate.convertAndSend(privateQueueSender, chatMessage);
+            LOGGER.info("📤 Mensagem privada enviada para remetente: {}", privateQueueSender);
 
             long endNanos = System.nanoTime();
-            LOGGER.info("📤 Mensagem privada enviada para queue: {} com timestamp: {} (tempo total: {}ns)",
-                    privateQueue, chatMessage.getTimestamp(), endNanos - startNanos);
+            LOGGER.info("📤 Mensagem privada processada com timestamp: {} (tempo total: {}ns)",
+                    chatMessage.getTimestamp(), endNanos - startNanos);
         }
     }
 }

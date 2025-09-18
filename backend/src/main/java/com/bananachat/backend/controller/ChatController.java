@@ -11,9 +11,14 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import com.bananachat.backend.entity.GroupMessage;
 import com.bananachat.backend.model.ChatMessage;
+import com.bananachat.backend.model.GroupChatMessage;
 import com.bananachat.backend.service.ChatHistoryService;
+import com.bananachat.backend.service.GroupMessageService;
+import com.bananachat.backend.service.GroupService;
 import com.bananachat.backend.service.OnlineUsersService;
+import com.bananachat.backend.service.UserService;
 
 @Controller
 public class ChatController {
@@ -28,6 +33,15 @@ public class ChatController {
 
     @Autowired
     private OnlineUsersService onlineUsersService;
+
+    @Autowired
+    private GroupMessageService groupMessageService;
+
+    @Autowired
+    private GroupService groupService;
+
+    @Autowired
+    private UserService userService;
 
     /**
      * Manipula o envio de mensagens de chat.
@@ -141,6 +155,155 @@ public class ChatController {
             long endNanos = System.nanoTime();
             LOGGER.info("📤 Mensagem privada processada com timestamp: {} (tempo total: {}ns)",
                     chatMessage.getTimestamp(), endNanos - startNanos);
+        }
+    }
+
+    /**
+     * Manipula o envio de mensagens de grupo.
+     * Recebe mensagens do cliente via WebSocket no destino
+     * "/app/group.sendMessage".
+     *
+     * @param groupMessage A mensagem de grupo recebida do cliente.
+     */
+    @MessageMapping("/group.sendMessage")
+    public void sendGroupMessage(@Payload GroupChatMessage groupMessage) {
+        long startNanos = System.nanoTime();
+        LOGGER.info("🚀 Mensagem de grupo recebida: {} no grupo ID: {} do usuário: {}",
+                groupMessage.getContent(), groupMessage.getGroupId(), groupMessage.getSender());
+
+        // Garante que o timestamp seja sempre definido no servidor
+        LocalDateTime now = LocalDateTime.now();
+        groupMessage.setTimestamp(now);
+
+        try {
+            // Debug: Verificar se o usuário existe
+            if (!userService.validateUser(groupMessage.getSender())) {
+                LOGGER.error("❌ Usuário {} não encontrado no sistema", groupMessage.getSender());
+                return;
+            }
+
+            // Debug: Verificar se o grupo existe
+            if (!groupService.findGroupEntityById(groupMessage.getGroupId()).isPresent()) {
+                LOGGER.error("❌ Grupo ID {} não encontrado", groupMessage.getGroupId());
+                return;
+            }
+
+            // Verificar se o usuário é membro do grupo
+            boolean isMember = groupService.isUserMemberOfGroup(groupMessage.getGroupId(), groupMessage.getSender());
+            LOGGER.info("🔍 Verificação de membro: usuário {} no grupo {} = {}",
+                    groupMessage.getSender(), groupMessage.getGroupId(), isMember);
+
+            if (!isMember) {
+                LOGGER.warn("❌ Usuário {} não é membro do grupo {}", groupMessage.getSender(),
+                        groupMessage.getGroupId());
+                return;
+            }
+
+            // Salvar a mensagem no banco
+            LOGGER.info("💾 Salvando mensagem no banco...");
+            groupMessageService.saveMessage(
+                    groupMessage.getContent(),
+                    groupMessage.getSender(),
+                    groupMessage.getGroupId(),
+                    GroupMessage.MessageType.valueOf(groupMessage.getType().name()));
+            LOGGER.info("✅ Mensagem salva no banco com sucesso");
+
+            // Enviar para todos os membros do grupo
+            String groupTopic = "/topic/group." + groupMessage.getGroupId();
+            LOGGER.info("📡 Enviando mensagem para tópico: {}", groupTopic);
+            messagingTemplate.convertAndSend(groupTopic, groupMessage);
+
+            long endNanos = System.nanoTime();
+            LOGGER.info("✅ Mensagem de grupo enviada para tópico: {} (tempo total: {}ns)",
+                    groupTopic, endNanos - startNanos);
+
+        } catch (Exception e) {
+            LOGGER.error("❌ Erro ao processar mensagem de grupo: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Manipula a entrada de usuário em um grupo.
+     * Recebe mensagens do cliente via WebSocket no destino "/app/group.joinGroup".
+     *
+     * @param groupMessage A mensagem contendo informações do usuário que entrou no
+     *                     grupo.
+     */
+    @MessageMapping("/group.joinGroup")
+    public void joinGroup(@Payload GroupChatMessage groupMessage) {
+        long startNanos = System.nanoTime();
+        LOGGER.info("👤 Usuário {} entrando no grupo ID: {}", groupMessage.getSender(), groupMessage.getGroupId());
+
+        // Garante que o timestamp seja sempre definido no servidor
+        LocalDateTime now = LocalDateTime.now();
+        groupMessage.setTimestamp(now);
+        groupMessage.setType(GroupChatMessage.MessageType.JOIN);
+
+        try {
+            // Verificar se o usuário é membro do grupo
+            if (!groupService.isUserMemberOfGroup(groupMessage.getGroupId(), groupMessage.getSender())) {
+                LOGGER.warn("Usuário {} não é membro do grupo {}", groupMessage.getSender(), groupMessage.getGroupId());
+                return;
+            }
+
+            // Atualizar status online do usuário
+            userService.setUserOnlineStatus(groupMessage.getSender(), true);
+
+            // Salvar mensagem de sistema
+            groupMessageService.saveMessage(
+                    groupMessage.getContent(),
+                    groupMessage.getSender(),
+                    groupMessage.getGroupId(),
+                    GroupMessage.MessageType.JOIN);
+
+            // Enviar para todos os membros do grupo
+            String groupTopic = "/topic/group." + groupMessage.getGroupId();
+            messagingTemplate.convertAndSend(groupTopic, groupMessage);
+
+            long endNanos = System.nanoTime();
+            LOGGER.info("📤 Usuário {} entrou no grupo {} (tempo total: {}ns)",
+                    groupMessage.getSender(), groupMessage.getGroupId(), endNanos - startNanos);
+
+        } catch (Exception e) {
+            LOGGER.error("Erro ao processar entrada no grupo: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Manipula a saída de usuário de um grupo.
+     * Recebe mensagens do cliente via WebSocket no destino "/app/group.leaveGroup".
+     *
+     * @param groupMessage A mensagem contendo informações do usuário que saiu do
+     *                     grupo.
+     */
+    @MessageMapping("/group.leaveGroup")
+    public void leaveGroup(@Payload GroupChatMessage groupMessage) {
+        long startNanos = System.nanoTime();
+        LOGGER.info("👤 Usuário {} saindo do grupo ID: {}", groupMessage.getSender(), groupMessage.getGroupId());
+
+        // Garante que o timestamp seja sempre definido no servidor
+        LocalDateTime now = LocalDateTime.now();
+        groupMessage.setTimestamp(now);
+        groupMessage.setType(GroupChatMessage.MessageType.LEAVE);
+
+        try {
+            // Salvar mensagem de sistema
+            groupMessageService.saveMessage(
+                    groupMessage.getContent(),
+                    groupMessage.getSender(),
+                    groupMessage.getGroupId(),
+                    GroupMessage.MessageType.LEAVE);
+
+            // Enviar para todos os membros do grupo
+            String groupTopic = "/topic/group." + groupMessage.getGroupId();
+            messagingTemplate.convertAndSend(groupTopic, groupMessage);
+
+            long endNanos = System.nanoTime();
+            LOGGER.info("📤 Usuário {} saiu do grupo {} (tempo total: {}ns)",
+                    groupMessage.getSender(), groupMessage.getGroupId(), endNanos - startNanos);
+
+        } catch (Exception e) {
+            LOGGER.error("Erro ao processar saída do grupo: {}", e.getMessage(), e);
         }
     }
 }

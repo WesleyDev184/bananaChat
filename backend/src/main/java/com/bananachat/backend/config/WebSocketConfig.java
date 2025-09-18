@@ -31,10 +31,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     // withSockJS() fornece um fallback para navegadores que não suportam
     // WebSockets.
     registry.addEndpoint("/ws-chat")
-        .setAllowedOrigins("http://localhost:3000", "http://localhost:3001", "http://localhost:3002") // React/Vite
-                                                                                                      // ports
+        .setAllowedOrigins("http://localhost:3000", "http://localhost:3001", "http://localhost:3002",
+            "http://localhost:5173") // React/Vite
+                                     // ports
         .withSockJS();
     registry.addEndpoint("/ws-chat-raw")
-        .setAllowedOrigins("http://localhost:3000", "http://localhost:3001", "http://localhost:3002");
+        .setAllowedOrigins("http://localhost:3000", "http://localhost:3001", "http://localhost:3002",
+            "http://localhost:5173");
   }
 }

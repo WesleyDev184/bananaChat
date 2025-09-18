@@ -1,9 +1,9 @@
 import FilterDropdown from "@/components/chat/FilterDropdown";
 import UserAvatar from "@/components/chat/UserAvatar";
-import type { ChatMessage, ChatType } from "@/components/chat/types";
+import type { ChatMessage, ChatType, GroupDto } from "@/components/chat/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { LoaderCircle } from "lucide-react";
+import { Globe, LoaderCircle, Users } from "lucide-react";
 import React from "react";
 
 interface MessageWindowProps {
@@ -12,6 +12,7 @@ interface MessageWindowProps {
   currentUsername: string;
   isAutoUpdating: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  groups?: GroupDto[];
 }
 
 export default function MessageWindow({
@@ -20,12 +21,16 @@ export default function MessageWindow({
   currentUsername,
   isAutoUpdating,
   messagesEndRef,
+  groups = [],
 }: MessageWindowProps) {
   // Filtra mensagens baseado no chat selecionado
   const filteredMessages = messages.filter((msg) => {
     if (selectedChat === "global") {
       // Chat global: mensagens sem recipient
       return !msg.recipient;
+    } else if (selectedChat.startsWith("group-")) {
+      // Chat de grupo: mensagens com recipient igual ao group-X
+      return msg.recipient === selectedChat;
     } else {
       // Chat privado: mensagens entre currentUsername e selectedChat
       return (
@@ -193,8 +198,33 @@ export default function MessageWindow({
   const getChatTitle = () => {
     if (selectedChat === "global") {
       return "Chat Global";
+    } else if (
+      typeof selectedChat === "string" &&
+      selectedChat.startsWith("group-")
+    ) {
+      // Buscar o nome do grupo
+      const groupId = parseInt(selectedChat.replace("group-", ""));
+      const group = groups.find((g) => g.id === groupId);
+      return group ? group.name : `Grupo #${groupId}`;
     }
-    return `Chat com ${selectedChat}`;
+    return selectedChat;
+  };
+
+  // Subtítulo do chat
+  const getChatSubtitle = () => {
+    if (selectedChat === "global") {
+      return "Conversa pública";
+    } else if (
+      typeof selectedChat === "string" &&
+      selectedChat.startsWith("group-")
+    ) {
+      const groupId = parseInt(selectedChat.replace("group-", ""));
+      const group = groups.find((g) => g.id === groupId);
+      return group
+        ? `Grupo ${group.type.toLowerCase()} • ${group.memberCount} membros`
+        : "Conversa em grupo";
+    }
+    return "Conversa privada";
   };
 
   return (
@@ -205,7 +235,11 @@ export default function MessageWindow({
           <div className="flex items-center space-x-3">
             {selectedChat === "global" ? (
               <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white text-sm">
-                🌍
+                <Globe className="h-4 w-4" />
+              </div>
+            ) : selectedChat.startsWith("group-") ? (
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm">
+                <Users className="h-4 w-4" />
               </div>
             ) : (
               <UserAvatar
@@ -217,9 +251,7 @@ export default function MessageWindow({
             <div>
               <div className="font-semibold">{getChatTitle()}</div>
               <div className="text-sm text-muted-foreground">
-                {selectedChat === "global"
-                  ? "Conversa pública"
-                  : `Conversa privada`}
+                {getChatSubtitle()}
               </div>
             </div>
           </div>
@@ -241,6 +273,8 @@ export default function MessageWindow({
               <div className="text-center text-muted-foreground mt-8">
                 {selectedChat === "global"
                   ? "Nenhuma mensagem no chat global ainda..."
+                  : selectedChat.startsWith("group-")
+                  ? `Nenhuma mensagem em ${getChatTitle()} ainda...`
                   : `Inicie uma conversa com ${selectedChat}`}
               </div>
             ) : (

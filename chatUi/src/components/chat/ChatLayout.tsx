@@ -1,4 +1,4 @@
-import ConversationList from "@/components/chat/ConversationList";
+import ChatNavigation from "@/components/chat/ChatNavigation";
 import MessageInput from "@/components/chat/MessageInput";
 import MessageWindow from "@/components/chat/MessageWindow";
 import type {
@@ -6,8 +6,10 @@ import type {
   ChatMessage,
   ChatType,
   Conversation,
+  CreateGroupRequest,
 } from "@/components/chat/types";
 import { useChatState } from "@/hooks/useChatState";
+import { useGroups } from "@/hooks/useGroups";
 import { useWebSocketConnection } from "@/hooks/useWebSocketConnection";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +19,16 @@ const API_BASE_URL = "http://localhost:8080/api";
 export default function ChatLayout() {
   const navigate = useNavigate();
   const { isConnected, stompClient: wsStompClient } = useWebSocketConnection();
+
+  // Hook de grupos
+  const {
+    groups,
+    isLoading: isLoadingGroups,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    refreshGroups,
+  } = useGroups();
 
   // Estados principais
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -36,6 +48,50 @@ export default function ChatLayout() {
     autoJoin,
     filterMessages,
   } = useChatState();
+
+  // Handlers para ações de grupo
+  const handleCreateGroup = useCallback(
+    async (request: CreateGroupRequest) => {
+      if (!username) return;
+
+      const group = await createGroup(request, username);
+      if (group) {
+        // Atualizar lista de grupos
+        await refreshGroups(username);
+      }
+    },
+    [createGroup, refreshGroups, username]
+  );
+
+  const handleJoinGroup = useCallback(
+    async (groupId: number) => {
+      if (!username) return;
+
+      const group = await joinGroup(groupId, username);
+      if (group) {
+        // Atualizar lista de grupos
+        await refreshGroups(username);
+      }
+    },
+    [joinGroup, refreshGroups, username]
+  );
+
+  const handleLeaveGroup = useCallback(
+    async (groupId: number) => {
+      if (!username) return;
+
+      const group = await leaveGroup(groupId, username);
+      if (group) {
+        // Atualizar lista de grupos
+        await refreshGroups(username);
+        // Se estava no grupo que saiu, voltar para o chat global
+        if (selectedChat === `group-${groupId}`) {
+          setSelectedChat("global");
+        }
+      }
+    },
+    [leaveGroup, refreshGroups, username, selectedChat, setSelectedChat]
+  );
 
   // Verificar se o usuário deve ser redirecionado para login
   useEffect(() => {
@@ -98,7 +154,14 @@ export default function ChatLayout() {
       let url = `${API_BASE_URL}/chat/history`;
       if (chatType === "global") {
         url = `${API_BASE_URL}/chat/history/public`;
+      } else if (chatType.startsWith("group-")) {
+        // Histórico de grupo
+        const groupId = chatType.replace("group-", "");
+        url = `${API_BASE_URL}/groups/${groupId}/messages?username=${encodeURIComponent(
+          username
+        )}`;
       } else if (chatType !== "global") {
+        // Histórico de chat privado
         url = `${API_BASE_URL}/chat/history/private?user1=${username}&user2=${chatType}`;
       }
 
@@ -107,17 +170,32 @@ export default function ChatLayout() {
         throw new Error(`Erro HTTP: ${response.status}`);
       }
 
-      const history: ChatHistoryDto[] = await response.json();
-      console.log("Histórico recebido:", history);
+      let convertedMessages: ChatMessage[];
 
-      const convertedMessages: ChatMessage[] = history.map((item) => ({
-        sender: item.sender,
-        recipient: item.recipient,
-        content: item.content,
-        type: item.type as "CHAT" | "JOIN" | "LEAVE",
-        timestamp: item.timestamp,
-        isNewMessage: false,
-      }));
+      if (chatType.startsWith("group-")) {
+        // Para grupos, a resposta tem estrutura diferente
+        const groupMessages = await response.json();
+        console.log("Mensagens do grupo recebidas:", groupMessages);
+        convertedMessages = groupMessages.map((item: any) => ({
+          sender: item.sender?.username || item.sender,
+          recipient: `group-${item.groupId}`,
+          content: item.content,
+          type: item.type as "CHAT" | "JOIN" | "LEAVE",
+          timestamp: item.timestamp,
+          isNewMessage: false,
+        }));
+      } else {
+        // Para chats normais, mantém a estrutura atual
+        const history: ChatHistoryDto[] = await response.json();
+        convertedMessages = history.map((item) => ({
+          sender: item.sender,
+          recipient: item.recipient,
+          content: item.content,
+          type: item.type as "CHAT" | "JOIN" | "LEAVE",
+          timestamp: item.timestamp,
+          isNewMessage: false,
+        }));
+      }
 
       return sortMessagesByTimestamp(convertedMessages);
     } catch (error) {
@@ -126,11 +204,55 @@ export default function ChatLayout() {
     }
   };
 
+  // Função para registrar usuário automaticamente
+  const registerUserIfNeeded = useCallback(async (username: string) => {
+    try {
+      // Verificar se o usuário já existe
+      const checkResponse = await fetch(
+        `${API_BASE_URL}/users/username/${username}`
+      );
+
+      if (checkResponse.status === 404) {
+        // Usuário não existe, criar automaticamente
+        console.log("Registrando usuário automaticamente:", username);
+
+        const createResponse = await fetch(`${API_BASE_URL}/users/register`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: username,
+            email: `${username}@bananachat.local`, // Email temporário
+            password: "temp123", // Senha temporária
+            displayName: username,
+          }),
+        });
+
+        if (createResponse.ok) {
+          console.log("Usuário registrado com sucesso:", username);
+        } else {
+          console.error(
+            "Erro ao registrar usuário:",
+            await createResponse.text()
+          );
+        }
+      } else if (checkResponse.ok) {
+        console.log("Usuário já existe:", username);
+      }
+    } catch (error) {
+      console.error("Erro ao verificar/registrar usuário:", error);
+    }
+  }, []);
+
   // Função joinChat
   const joinChat = useCallback(async () => {
     if (!username.trim() || !wsStompClient.current?.connected) {
       return;
     }
+
+    // Registrar usuário no banco se necessário
+    await registerUserIfNeeded(username);
 
     const latestHistory = await fetchChatHistory(selectedChat);
     const sortedHistory = sortMessagesByTimestamp(latestHistory);
@@ -176,6 +298,7 @@ export default function ChatLayout() {
     wsStompClient,
     sortMessagesByTimestamp,
     scrollToBottom,
+    registerUserIfNeeded,
   ]);
 
   // Aplicar filtros nas mensagens
@@ -189,6 +312,16 @@ export default function ChatLayout() {
       joinChat();
     }
   }, [username, autoJoin, isJoined, isConnected, joinChat]);
+
+  // Carregar grupos quando o usuário faz login
+  useEffect(() => {
+    if (username && isJoined) {
+      console.log("🔄 Carregando grupos para usuário:", username);
+      refreshGroups(username).then(() => {
+        console.log("✅ Grupos recarregados para:", username);
+      });
+    }
+  }, [username, isJoined, refreshGroups]);
 
   // Configurar subscriptions WebSocket quando conectado e usuário entrou
   useEffect(() => {
@@ -291,16 +424,97 @@ export default function ChatLayout() {
       }
     );
 
+    // Subscription para mensagens de grupo - só para grupos do usuário
+    const groupSubs: any[] = [];
+    console.log("🔍 Configurando subscriptions para grupos:", groups);
+    console.log("🔍 Total de grupos:", groups.length);
+    console.log("🔍 Usuário atual:", username);
+
+    groups.forEach((group) => {
+      console.log(
+        `🔍 Verificando grupo ${group.id} (${group.name}): isMember=${group.isUserMember}, owner=${group.owner?.username}`
+      );
+      if (group.isUserMember) {
+        // Só se inscrever em grupos dos quais o usuário é membro
+        const groupTopic = `/topic/group.${group.id}`;
+        console.log(`🔗 Tentando inscrever no tópico: ${groupTopic}`);
+        const groupSub = wsStompClient.current?.subscribe(groupTopic, (msg) => {
+          try {
+            console.log(`Mensagem recebida no tópico ${groupTopic}:`, msg.body);
+            const receivedGroupMessage = JSON.parse(msg.body);
+
+            // Converter GroupChatMessage para ChatMessage
+            const receivedMessage: ChatMessage = {
+              sender: receivedGroupMessage.sender,
+              content: receivedGroupMessage.content,
+              type: receivedGroupMessage.type,
+              recipient: `group-${receivedGroupMessage.groupId}`,
+              timestamp: receivedGroupMessage.timestamp,
+              isNewMessage: true,
+            };
+
+            if (receivedMessage.timestamp) {
+              receivedMessage.timestamp = new Date(
+                receivedMessage.timestamp
+              ).toISOString();
+            } else {
+              receivedMessage.timestamp = new Date().toISOString();
+            }
+
+            console.log("Mensagem de grupo convertida:", receivedMessage);
+
+            setMessages((prev) => {
+              const messageExists = prev.some(
+                (existingMsg) =>
+                  existingMsg.sender === receivedMessage.sender &&
+                  existingMsg.content === receivedMessage.content &&
+                  existingMsg.timestamp === receivedMessage.timestamp &&
+                  existingMsg.recipient === receivedMessage.recipient
+              );
+
+              if (!messageExists) {
+                console.log("Adicionando nova mensagem de grupo ao estado");
+                const newMessages = [...prev, receivedMessage];
+                setTimeout(() => scrollToBottom(), 100);
+                return sortMessagesByTimestamp(newMessages);
+              } else {
+                console.log("Mensagem de grupo já existe, ignorando");
+              }
+              return prev;
+            });
+          } catch (error) {
+            console.error("Erro ao processar mensagem de grupo:", error);
+          }
+        });
+
+        if (groupSub) {
+          groupSubs.push(groupSub);
+          console.log(
+            `✅ Inscrito no grupo ${group.id}: ${group.name} (tópico: ${groupTopic})`
+          );
+        } else {
+          console.error(
+            `❌ Falha ao inscrever no grupo ${group.id}: ${group.name}`
+          );
+        }
+      } else {
+        console.log(
+          `⏭️ Pulando grupo ${group.id} (${group.name}): usuário não é membro`
+        );
+      }
+    });
+
     return () => {
       publicSub.unsubscribe();
       privateSub.unsubscribe();
+      groupSubs.forEach((sub) => sub.unsubscribe());
     };
   }, [
     wsStompClient.current?.connected,
     isJoined,
     username,
-    sortMessagesByTimestamp,
-    scrollToBottom,
+    groups.length, // Usar apenas o tamanho da lista, não a referência completa
+    // Remover sortMessagesByTimestamp e scrollToBottom das dependências
   ]);
 
   // Carregar histórico quando mudar o chat selecionado
@@ -405,12 +619,34 @@ export default function ChatLayout() {
 
     try {
       if (selectedChat === "global") {
+        console.log("Enviando mensagem global:", message);
         wsStompClient.current.publish({
           destination: "/app/chat.sendMessage",
           body: JSON.stringify(message),
         });
+      } else if (selectedChat.startsWith("group-")) {
+        // Enviar mensagem para grupo
+        const groupId = selectedChat.replace("group-", "");
+        const groupMessage = {
+          sender: username,
+          content: messageInput,
+          type: "CHAT",
+          groupId: parseInt(groupId),
+          timestamp: new Date().toISOString(),
+        };
+        console.log(
+          "Enviando mensagem de grupo:",
+          groupMessage,
+          "para destino: /app/group.sendMessage"
+        );
+        wsStompClient.current.publish({
+          destination: "/app/group.sendMessage",
+          body: JSON.stringify(groupMessage),
+        });
       } else {
+        // Enviar mensagem privada
         message.recipient = selectedChat as string;
+        console.log("Enviando mensagem privada:", message);
         wsStompClient.current.publish({
           destination: "/app/chat.sendPrivateMessage",
           body: JSON.stringify(message),
@@ -484,6 +720,24 @@ export default function ChatLayout() {
     })),
   ];
 
+  // Filtrar mensagens por chat selecionado
+  const getMessagesForChat = (chatId: string) => {
+    if (chatId === "global") {
+      return filteredMessages.filter((m) => !m.recipient);
+    } else if (chatId.startsWith("group-")) {
+      return filteredMessages.filter((m) => m.recipient === chatId);
+    } else {
+      return filteredMessages.filter(
+        (m) =>
+          (m.sender === chatId && m.recipient === username) ||
+          (m.sender === username && m.recipient === chatId)
+      );
+    }
+  };
+
+  // Mensagens para o chat atual
+  const currentChatMessages = getMessagesForChat(selectedChat);
+
   // Se o usuário não tem username, mostra loading enquanto redireciona
   if (!username) {
     return (
@@ -502,24 +756,31 @@ export default function ChatLayout() {
     <div className="max-h-full w-full h-full rounded-lg border bg-background shadow-sm flex overflow-hidden">
       <aside className="w-72 min-w-[16rem] border-r bg-muted p-2 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
-          <ConversationList
+          <ChatNavigation
             conversations={conversations}
+            groups={groups}
             selectedId={selectedChat.toString()}
             onSelect={setSelectedChat}
+            onSelectGroup={(groupId) => setSelectedChat(`group-${groupId}`)}
             onlineUsersCount={onlineUsers.length}
             currentUsername={username}
             onLeaveChat={leaveChat}
+            onCreateGroup={handleCreateGroup}
+            onJoinGroup={handleJoinGroup}
+            onLeaveGroup={handleLeaveGroup}
+            isLoadingGroups={isLoadingGroups}
           />
         </div>
       </aside>
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="flex-1 min-h-0 overflow-hidden">
           <MessageWindow
-            messages={filteredMessages}
+            messages={currentChatMessages}
             selectedChat={selectedChat}
             currentUsername={username}
             isAutoUpdating={isAutoUpdating}
             messagesEndRef={messagesEndRef}
+            groups={groups}
           />
         </div>
         <div className="border-t p-3 flex-shrink-0">

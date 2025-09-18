@@ -26,14 +26,17 @@ export function useWebSocketConnection(): UseWebSocketConnectionReturn {
     }
 
     console.log("🔌 Inicializando conexão WebSocket...");
+    console.log("🌐 URL do WebSocket:", WEBSOCKET_URL);
     setConnectionStatus("Conectando...");
     setIsLoadingHistory(true);
 
     const socket = new SockJS(WEBSOCKET_URL);
+    console.log("🔗 SockJS criado:", socket);
     stompClient.current = new Client({
       webSocketFactory: () => socket,
-      onConnect: () => {
-        console.log("✅ Conectado ao STOMP");
+      onConnect: (frame) => {
+        console.log("✅ Conectado ao STOMP!", frame);
+        console.log("🔧 Cliente STOMP ativo:", stompClient.current);
         setConnectionStatus("Conectado");
         setIsLoadingHistory(false);
       },

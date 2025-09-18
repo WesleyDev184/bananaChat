@@ -279,6 +279,30 @@ public class GroupService {
   }
 
   /**
+   * Atualiza informações do grupo (versão simplificada)
+   */
+  public GroupDto updateGroup(Long groupId, String name, String description) {
+    LOGGER.info("Atualizando grupo ID: {}", groupId);
+
+    Group group = groupRepository.findByIdAndIsActiveTrue(groupId)
+        .orElseThrow(() -> new IllegalArgumentException("Grupo não encontrado: " + groupId));
+
+    // Atualizar campos
+    if (name != null && !name.trim().isEmpty()) {
+      group.setName(name.trim());
+    }
+
+    if (description != null) {
+      group.setDescription(description.trim());
+    }
+
+    Group updatedGroup = groupRepository.save(group);
+    LOGGER.info("Grupo atualizado com sucesso: {}", updatedGroup.getName());
+
+    return new GroupDto(updatedGroup, updatedGroup.getOwner().getId());
+  }
+
+  /**
    * Desativa grupo (soft delete)
    */
   public void deleteGroup(Long groupId, String username) {
@@ -294,6 +318,22 @@ public class GroupService {
     if (!group.isOwner(user)) {
       throw new IllegalArgumentException("Apenas o proprietário pode deletar o grupo");
     }
+
+    // Marcar como inativo
+    group.setIsActive(false);
+    groupRepository.save(group);
+
+    LOGGER.info("Grupo desativado com sucesso: {}", group.getName());
+  }
+
+  /**
+   * Desativa grupo (soft delete) - versão simplificada
+   */
+  public void deleteGroup(Long groupId) {
+    LOGGER.info("Desativando grupo ID: {}", groupId);
+
+    Group group = groupRepository.findByIdAndIsActiveTrue(groupId)
+        .orElseThrow(() -> new IllegalArgumentException("Grupo não encontrado: " + groupId));
 
     // Marcar como inativo
     group.setIsActive(false);

@@ -181,14 +181,30 @@ public class GroupController {
   }
 
   /**
+   * Remover usuário específico do grupo
+   */
+  @DeleteMapping("/{id}/members/{username}")
+  public ResponseEntity<?> removeSpecificUserFromGroup(@PathVariable Long id, @PathVariable String username) {
+    try {
+      GroupDto group = groupService.removeUserFromGroup(id, username);
+      return ResponseEntity.ok(group);
+    } catch (IllegalArgumentException e) {
+      LOGGER.warn("Erro ao remover usuário {} do grupo ID {}: {}", username, id, e.getMessage());
+      return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+    } catch (Exception e) {
+      LOGGER.error("Erro interno ao remover usuário {} do grupo ID: {}", username, id, e);
+      return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+          .body(new ErrorResponse("Erro interno do servidor"));
+    }
+  }
+
+  /**
    * Atualizar grupo
    */
   @PutMapping("/{id}")
-  public ResponseEntity<?> updateGroup(@PathVariable Long id, @RequestBody UpdateGroupRequest request,
-      @RequestParam String username) {
+  public ResponseEntity<?> updateGroup(@PathVariable Long id, @RequestBody UpdateGroupRequest request) {
     try {
-      GroupDto group = groupService.updateGroup(id, username, request.getName(), request.getDescription(),
-          request.getMaxMembers());
+      GroupDto group = groupService.updateGroup(id, request.getName(), request.getDescription());
       return ResponseEntity.ok(group);
     } catch (IllegalArgumentException e) {
       LOGGER.warn("Erro ao atualizar grupo ID {}: {}", id, e.getMessage());
@@ -204,9 +220,9 @@ public class GroupController {
    * Deletar grupo
    */
   @DeleteMapping("/{id}")
-  public ResponseEntity<?> deleteGroup(@PathVariable Long id, @RequestParam String username) {
+  public ResponseEntity<?> deleteGroup(@PathVariable Long id) {
     try {
-      groupService.deleteGroup(id, username);
+      groupService.deleteGroup(id);
       return ResponseEntity.ok(new MessageResponse("Grupo removido com sucesso"));
     } catch (IllegalArgumentException e) {
       LOGGER.warn("Erro ao deletar grupo ID {}: {}", id, e.getMessage());

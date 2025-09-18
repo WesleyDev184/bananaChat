@@ -1,7 +1,6 @@
 import ChatNavigation from "@/components/chat/ChatNavigation";
 import MessageInput from "@/components/chat/MessageInput";
 import MessageWindow from "@/components/chat/MessageWindow";
-import UserSelectionDialog from "@/components/chat/UserSelectionDialog";
 import type {
   ChatHistoryDto,
   ChatMessage,
@@ -9,11 +8,13 @@ import type {
   Conversation,
   CreateGroupRequest,
 } from "@/components/chat/types";
+import UserSelectionDialog from "@/components/chat/UserSelectionDialog";
 import { useChatState } from "@/hooks/useChatState";
 import { useGroups } from "@/hooks/useGroups";
 import { useWebSocketConnection } from "@/hooks/useWebSocketConnection";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import GroupSettingsDialog from "./GroupSettingsDialog";
 
 const API_BASE_URL = "http://localhost:8080/api";
 
@@ -47,6 +48,20 @@ export default function ChatLayout() {
     isOpen: false,
     groupId: "",
     groupName: "",
+    currentMembers: [],
+  });
+
+  const [groupSettingsDialog, setGroupSettingsDialog] = useState<{
+    isOpen: boolean;
+    groupId: string;
+    groupName: string;
+    groupDescription: string;
+    currentMembers: string[];
+  }>({
+    isOpen: false,
+    groupId: "",
+    groupName: "",
+    groupDescription: "",
     currentMembers: [],
   });
 
@@ -126,6 +141,26 @@ export default function ChatLayout() {
     [username, groups]
   );
 
+  const handleOpenGroupSettings = useCallback(
+    async (groupId: string) => {
+      if (!username) return;
+
+      const group = groups.find((g) => g.id.toString() === groupId);
+      if (group) {
+        const currentMembers =
+          group.members?.map((member) => member.username) || [];
+        setGroupSettingsDialog({
+          isOpen: true,
+          groupId: groupId,
+          groupName: group.name,
+          groupDescription: group.description || "",
+          currentMembers: currentMembers,
+        });
+      }
+    },
+    [username, groups]
+  );
+
   const handleAddMembersToGroup = useCallback(
     async (usernamesToAdd: string[]) => {
       if (!username || !userSelectionDialog.groupId) return;
@@ -166,17 +201,91 @@ export default function ChatLayout() {
     ]
   );
 
-  const handleGroupSettings = useCallback(
-    async (groupId: string) => {
-      if (!username) return;
+  const handleUpdateGroup = useCallback(
+    async (groupId: number, name: string, description: string) => {
+      try {
+        const response = await fetch(
+          `http://localhost:8080/api/groups/${groupId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name,
+              description,
+            }),
+          }
+        );
 
-      // Por enquanto, apenas um placeholder - implementaremos a lógica completa
-      console.log(`Configurações do grupo ${groupId}`);
-
-      // TODO: Implementar dialog para configurações do grupo
-      // Isso permitirá editar nome, descrição, tipo do grupo, etc.
+        if (response.ok) {
+          await refreshGroups(username);
+          console.log(`✅ Grupo atualizado com sucesso!`);
+        } else {
+          throw new Error("Erro ao atualizar grupo");
+        }
+      } catch (error) {
+        console.error("Erro ao atualizar grupo:", error);
+        console.log("❌ Erro ao atualizar grupo");
+      }
     },
-    [username]
+    [refreshGroups, username]
+  );
+
+  const handleRemoveGroupMember = useCallback(
+    async (groupId: number, usernameToRemove: string) => {
+      try {
+        const response = await fetch(
+          `http://localhost:8080/api/groups/${groupId}/members/${usernameToRemove}`,
+          {
+            method: "DELETE",
+          }
+        );
+
+        if (response.ok) {
+          await refreshGroups(username);
+          console.log(`✅ ${usernameToRemove} removido do grupo`);
+        } else {
+          throw new Error("Erro ao remover membro");
+        }
+      } catch (error) {
+        console.error("Erro ao remover membro:", error);
+        console.log("❌ Erro ao remover membro");
+      }
+    },
+    [refreshGroups, username]
+  );
+
+  const handleDeleteGroup = useCallback(
+    async (groupId: number) => {
+      try {
+        const response = await fetch(
+          `http://localhost:8080/api/groups/${groupId}`,
+          {
+            method: "DELETE",
+          }
+        );
+
+        if (response.ok) {
+          await refreshGroups(username);
+          setSelectedChat(""); // Deselecionar o chat
+          console.log(`✅ Grupo deletado com sucesso!`);
+          setGroupSettingsDialog({
+            isOpen: false,
+            groupId: "",
+            groupName: "",
+            groupDescription: "",
+            currentMembers: [],
+          });
+        } else {
+          throw new Error("Erro ao deletar grupo");
+        }
+      } catch (error) {
+        console.error("Erro ao deletar grupo:", error);
+        console.log("❌ Erro ao deletar grupo");
+      }
+    },
+    [refreshGroups, setSelectedChat, username]
   );
 
   // Verificar se o usuário deve ser redirecionado para login
@@ -945,7 +1054,7 @@ export default function ChatLayout() {
             messagesEndRef={messagesEndRef}
             groups={groups}
             onAddMember={handleAddMember}
-            onGroupSettings={handleGroupSettings}
+            onGroupSettings={handleOpenGroupSettings}
           />
         </div>
         <div className="border-t p-3 flex-shrink-0">
@@ -967,6 +1076,28 @@ export default function ChatLayout() {
         onAddMembers={handleAddMembersToGroup}
         groupName={userSelectionDialog.groupName}
         currentMembers={userSelectionDialog.currentMembers}
+        isLoading={isLoadingGroups}
+      />
+
+      <GroupSettingsDialog
+        isOpen={groupSettingsDialog.isOpen}
+        onClose={() =>
+          setGroupSettingsDialog({
+            isOpen: false,
+            groupId: "",
+            groupName: "",
+            groupDescription: "",
+            currentMembers: [],
+          })
+        }
+        group={
+          groups.find((g) => g.id.toString() === groupSettingsDialog.groupId) ||
+          null
+        }
+        currentUsername={username || ""}
+        onUpdateGroup={handleUpdateGroup}
+        onRemoveMember={handleRemoveGroupMember}
+        onDeleteGroup={handleDeleteGroup}
         isLoading={isLoadingGroups}
       />
     </div>

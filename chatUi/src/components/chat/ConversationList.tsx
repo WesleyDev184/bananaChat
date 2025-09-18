@@ -29,8 +29,8 @@ export default function ConversationList({
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Conversas</h2>
           <Badge
-            variant="outline"
-            className="text-xs bg-green-50 text-green-700 border-green-200"
+            variant="secondary"
+            className="text-xs bg-green-500/20 text-green-400 border-green-500/30"
           >
             🟢 {onlineUsersCount} online
           </Badge>

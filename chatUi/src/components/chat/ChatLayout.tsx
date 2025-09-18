@@ -711,7 +711,7 @@ export default function ChatLayout() {
   // Interface principal do chat
   return (
     <div className="max-h-full w-full h-full rounded-lg border bg-background shadow-sm flex overflow-hidden">
-      <aside className="w-72 min-w-[16rem] border-r bg-muted/50 p-2 flex flex-col overflow-hidden">
+      <aside className="w-72 min-w-[16rem] border-r bg-muted p-2 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
           <ConversationList
             conversations={conversations}

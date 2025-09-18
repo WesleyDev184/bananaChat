@@ -1,9 +1,9 @@
 import FilterDropdown from "@/components/chat/FilterDropdown";
 import UserAvatar from "@/components/chat/UserAvatar";
 import type { ChatMessage, ChatType } from "@/components/chat/types";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { LoaderCircle } from "lucide-react";
 import React from "react";
 
 interface MessageWindowProps {
@@ -225,12 +225,7 @@ export default function MessageWindow({
           </div>
           <div className="flex items-center gap-2">
             {isAutoUpdating && (
-              <Badge
-                variant="outline"
-                className="text-xs bg-blue-50 text-blue-700 border-blue-200 animate-pulse"
-              >
-                🔄 Sincronizando...
-              </Badge>
+              <LoaderCircle className="h-4 w-4 text-blue-600 animate-spin" />
             )}
             <FilterDropdown />
           </div>

@@ -1,6 +1,8 @@
 import type { ChatMessage, ChatType } from "@/components/chat/types";
+import UserAvatar from "@/components/chat/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import React from "react";
 
 interface MessageWindowProps {
@@ -103,8 +105,17 @@ export default function MessageWindow({
         key={`${msg.timestamp || Date.now()}-${msg.sender}-${idx}`}
         className={`flex ${
           isOwnMessage && !isSystemMessage ? "justify-end" : "justify-start"
-        } mb-4`}
+        } mb-4 gap-2`}
       >
+        {/* Avatar para mensagens de outros usuários */}
+        {!isSystemMessage && !isOwnMessage && (
+          <UserAvatar
+            username={msg.sender}
+            size="sm"
+            className="mt-1 flex-shrink-0"
+          />
+        )}
+
         <div
           className={`max-w-[70%] rounded-lg p-3 ${
             isSystemMessage
@@ -168,12 +179,20 @@ export default function MessageWindow({
   return (
     <div className="flex flex-col min-h-0 h-full max-h-full overflow-hidden">
       {/* Header do chat */}
-      <div className="border-b p-4 bg-muted/50 flex-shrink-0">
+      <div className="p-4 bg-muted/50 flex-shrink-0">
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/20">
-              {selectedChat === "global" ? "🌍" : "👤"}
-            </div>
+            {selectedChat === "global" ? (
+              <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white text-sm">
+                🌍
+              </div>
+            ) : (
+              <UserAvatar
+                username={selectedChat}
+                size="sm"
+                showOnlineIndicator={false}
+              />
+            )}
             <div>
               <div className="font-semibold">{getChatTitle()}</div>
               <div className="text-sm text-muted-foreground">
@@ -184,11 +203,15 @@ export default function MessageWindow({
             </div>
           </div>
           {isAutoUpdating && (
-            <Badge variant="secondary" className="text-xs">
-              Sincronizando...
+            <Badge
+              variant="outline"
+              className="text-xs bg-blue-50 text-blue-700 border-blue-200 animate-pulse"
+            >
+              🔄 Sincronizando...
             </Badge>
           )}
         </div>
+        <Separator className="mt-4" />
       </div>
 
       {/* Área de mensagens com ScrollArea */}

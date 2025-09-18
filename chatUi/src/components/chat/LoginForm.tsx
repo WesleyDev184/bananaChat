@@ -25,9 +25,12 @@ export default function LoginForm({
         {/* Header */}
         <div className="text-center px-8 pt-8 pb-6">
           <div className="mb-4">
-            <h1 className="text-4xl font-bold mb-3 bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-              🍌 BananaChat
-            </h1>
+            <div className="flex items-center justify-center gap-1">
+              <img src="/logobanachat.png" alt="Logo" className="inline w-14" />
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
+                BananaChat
+              </h1>
+            </div>
             <p className="text-muted-foreground text-base">
               Entre no chat e comece a conversar!
             </p>

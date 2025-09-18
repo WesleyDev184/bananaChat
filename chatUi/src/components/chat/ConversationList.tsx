@@ -1,6 +1,8 @@
 import type { Conversation } from "@/components/chat/types";
+import UserAvatar from "@/components/chat/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 export default function ConversationList({
   conversations,
@@ -23,17 +25,22 @@ export default function ConversationList({
   return (
     <div className="h-full flex flex-col gap-2">
       {/* Header */}
-      <div className="p-2 border-b">
+      <div className="p-2">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Conversas</h2>
-          <Badge variant="secondary" className="text-xs">
-            {onlineUsersCount} online
+          <Badge
+            variant="outline"
+            className="text-xs bg-green-50 text-green-700 border-green-200"
+          >
+            🟢 {onlineUsersCount} online
           </Badge>
         </div>
         <div className="text-sm text-muted-foreground mt-1">
           Conectado como: <strong>{currentUsername}</strong>
         </div>
       </div>
+
+      <Separator />
 
       {/* Chat Global */}
       {globalChat && (
@@ -46,7 +53,7 @@ export default function ConversationList({
             }`}
           >
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
+              <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
                 🌍
               </div>
               <div className="flex-1 min-w-0">
@@ -87,14 +94,12 @@ export default function ConversationList({
                   }`}
                 >
                   <div className="flex items-center space-x-3">
-                    <div className="relative">
-                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                        👤
-                      </div>
-                      {conversation.isOnlineUser && (
-                        <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
-                      )}
-                    </div>
+                    <UserAvatar
+                      username={conversation.title}
+                      isOnline={conversation.isOnlineUser}
+                      showOnlineIndicator={true}
+                      size="md"
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-center">
                         <div className="font-medium">{conversation.title}</div>
@@ -127,7 +132,8 @@ export default function ConversationList({
       </div>
 
       {/* Footer */}
-      <div className="p-2 border-t">
+      <div className="p-2">
+        <Separator className="mb-2" />
         <Button
           onClick={onLeaveChat}
           variant="outline"

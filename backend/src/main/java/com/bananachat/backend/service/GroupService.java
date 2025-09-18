@@ -1,11 +1,13 @@
 package com.bananachat.backend.service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,9 @@ public class GroupService {
 
   @Autowired
   private UserRepository userRepository;
+
+  @Autowired
+  private SimpMessagingTemplate messagingTemplate;
 
   /**
    * Cria um novo grupo
@@ -64,7 +69,18 @@ public class GroupService {
 
     LOGGER.info("Grupo criado com sucesso: {} (ID: {})", savedGroup.getName(), savedGroup.getId());
 
-    return new GroupDto(savedGroup, owner.getId());
+    GroupDto groupDto = new GroupDto(savedGroup, owner.getId());
+
+    // Notificar todos os usuários sobre o novo grupo via WebSocket
+    try {
+      messagingTemplate.convertAndSend("/topic/groups.update",
+          Map.of("action", "GROUP_CREATED", "group", groupDto));
+      LOGGER.info("Notificação de novo grupo enviada via WebSocket: {}", savedGroup.getName());
+    } catch (Exception e) {
+      LOGGER.error("Erro ao enviar notificação de novo grupo via WebSocket: ", e);
+    }
+
+    return groupDto;
   }
 
   /**
@@ -140,7 +156,18 @@ public class GroupService {
 
     LOGGER.info("Usuário {} adicionado ao grupo {} com sucesso", username, group.getName());
 
-    return new GroupDto(savedGroup, user.getId());
+    GroupDto groupDto = new GroupDto(savedGroup, user.getId());
+
+    // Notificar todos os usuários sobre a mudança no grupo via WebSocket
+    try {
+      messagingTemplate.convertAndSend("/topic/groups.update",
+          Map.of("action", "MEMBER_ADDED", "group", groupDto, "username", username));
+      LOGGER.info("Notificação de membro adicionado enviada via WebSocket: {} em {}", username, group.getName());
+    } catch (Exception e) {
+      LOGGER.error("Erro ao enviar notificação de membro adicionado via WebSocket: ", e);
+    }
+
+    return groupDto;
   }
 
   /**
@@ -171,7 +198,18 @@ public class GroupService {
 
     LOGGER.info("Usuário {} removido do grupo {} com sucesso", username, group.getName());
 
-    return new GroupDto(savedGroup, user.getId());
+    GroupDto groupDto = new GroupDto(savedGroup, user.getId());
+
+    // Notificar todos os usuários sobre a mudança no grupo via WebSocket
+    try {
+      messagingTemplate.convertAndSend("/topic/groups.update",
+          Map.of("action", "MEMBER_REMOVED", "group", groupDto, "username", username));
+      LOGGER.info("Notificação de membro removido enviada via WebSocket: {} de {}", username, group.getName());
+    } catch (Exception e) {
+      LOGGER.error("Erro ao enviar notificação de membro removido via WebSocket: ", e);
+    }
+
+    return groupDto;
   }
 
   /**

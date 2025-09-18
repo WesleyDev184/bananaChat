@@ -28,7 +28,7 @@ export default function CreateGroupDialog({
   const [formData, setFormData] = useState<CreateGroupRequest>({
     name: "",
     description: "",
-    type: "PUBLIC",
+    type: "PRIVATE",
     maxMembers: 100,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -137,10 +137,10 @@ export default function CreateGroupDialog({
                 }
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
+                <option value="PRIVATE">Privado (apenas por convite)</option>
                 <option value="PUBLIC">
                   Público (qualquer um pode entrar)
                 </option>
-                <option value="PRIVATE">Privado (apenas por convite)</option>
                 <option value="RESTRICTED">
                   Restrito (aprovação necessária)
                 </option>

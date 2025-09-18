@@ -1,6 +1,7 @@
 import ChatNavigation from "@/components/chat/ChatNavigation";
 import MessageInput from "@/components/chat/MessageInput";
 import MessageWindow from "@/components/chat/MessageWindow";
+import UserSelectionDialog from "@/components/chat/UserSelectionDialog";
 import type {
   ChatHistoryDto,
   ChatMessage,
@@ -35,6 +36,19 @@ export default function ChatLayout() {
   const [isJoined, setIsJoined] = useState<boolean>(false);
   const [isAutoUpdating, setIsAutoUpdating] = useState<boolean>(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+
+  // Estados para dialogs
+  const [userSelectionDialog, setUserSelectionDialog] = useState<{
+    isOpen: boolean;
+    groupId: string;
+    groupName: string;
+    currentMembers: string[];
+  }>({
+    isOpen: false,
+    groupId: "",
+    groupName: "",
+    currentMembers: [],
+  });
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -91,6 +105,78 @@ export default function ChatLayout() {
       }
     },
     [leaveGroup, refreshGroups, username, selectedChat, setSelectedChat]
+  );
+
+  const handleAddMember = useCallback(
+    async (groupId: string) => {
+      if (!username) return;
+
+      const group = groups.find((g) => g.id.toString() === groupId);
+      if (group) {
+        const currentMembers =
+          group.members?.map((member) => member.username) || [];
+        setUserSelectionDialog({
+          isOpen: true,
+          groupId: groupId,
+          groupName: group.name,
+          currentMembers: currentMembers,
+        });
+      }
+    },
+    [username, groups]
+  );
+
+  const handleAddMembersToGroup = useCallback(
+    async (usernamesToAdd: string[]) => {
+      if (!username || !userSelectionDialog.groupId) return;
+
+      try {
+        const groupIdNum = parseInt(userSelectionDialog.groupId);
+
+        // Adicionar múltiplos usuários
+        for (const usernameToAdd of usernamesToAdd) {
+          await joinGroup(groupIdNum, usernameToAdd);
+        }
+
+        // Atualizar lista de grupos
+        await refreshGroups(username);
+
+        // Fechar dialog
+        setUserSelectionDialog({
+          isOpen: false,
+          groupId: "",
+          groupName: "",
+          currentMembers: [],
+        });
+
+        console.log(
+          `✅ ${usernamesToAdd.length} usuário(s) adicionado(s) ao grupo ${userSelectionDialog.groupName}`
+        );
+      } catch (error) {
+        console.error("❌ Erro ao adicionar membros:", error);
+        // TODO: Mostrar toast de erro
+      }
+    },
+    [
+      username,
+      userSelectionDialog.groupId,
+      userSelectionDialog.groupName,
+      joinGroup,
+      refreshGroups,
+    ]
+  );
+
+  const handleGroupSettings = useCallback(
+    async (groupId: string) => {
+      if (!username) return;
+
+      // Por enquanto, apenas um placeholder - implementaremos a lógica completa
+      console.log(`Configurações do grupo ${groupId}`);
+
+      // TODO: Implementar dialog para configurações do grupo
+      // Isso permitirá editar nome, descrição, tipo do grupo, etc.
+    },
+    [username]
   );
 
   // Verificar se o usuário deve ser redirecionado para login
@@ -323,6 +409,27 @@ export default function ChatLayout() {
     }
   }, [username, isJoined, refreshGroups]);
 
+  // Sistema de atualização constante dos grupos (polling a cada 30 segundos)
+  useEffect(() => {
+    if (!username || !isJoined) return;
+
+    const refreshInterval = setInterval(() => {
+      console.log("🔄 Atualizando lista de grupos automaticamente...");
+      refreshGroups(username)
+        .then(() => {
+          console.log("✅ Lista de grupos atualizada automaticamente");
+        })
+        .catch((error) => {
+          console.error("❌ Erro ao atualizar grupos automaticamente:", error);
+        });
+    }, 30000); // Atualiza a cada 30 segundos
+
+    return () => {
+      clearInterval(refreshInterval);
+      console.log("🛑 Parou atualização automática de grupos");
+    };
+  }, [username, isJoined, refreshGroups]);
+
   // Configurar subscriptions WebSocket quando conectado e usuário entrou
   useEffect(() => {
     if (!wsStompClient.current?.connected || !isJoined) return;
@@ -516,6 +623,62 @@ export default function ChatLayout() {
     groups.length, // Usar apenas o tamanho da lista, não a referência completa
     // Remover sortMessagesByTimestamp e scrollToBottom das dependências
   ]);
+
+  // Subscription para atualizações de grupos via WebSocket
+  useEffect(() => {
+    if (!wsStompClient.current?.connected || !isJoined || !username) return;
+
+    const groupUpdatesSub = wsStompClient.current.subscribe(
+      "/topic/groups.update",
+      (msg) => {
+        try {
+          const update = JSON.parse(msg.body);
+          console.log("📢 Atualização de grupo recebida:", update);
+
+          if (update.action === "GROUP_CREATED") {
+            console.log("🆕 Novo grupo criado:", update.group);
+            // Atualizar lista de grupos
+            refreshGroups(username).then(() => {
+              console.log("✅ Lista de grupos atualizada após criação");
+            });
+          } else if (update.action === "MEMBER_ADDED") {
+            console.log(
+              "👥 Membro adicionado:",
+              update.username,
+              "ao grupo",
+              update.group.name
+            );
+            // Atualizar lista de grupos
+            refreshGroups(username).then(() => {
+              console.log(
+                "✅ Lista de grupos atualizada após adição de membro"
+              );
+            });
+          } else if (update.action === "MEMBER_REMOVED") {
+            console.log(
+              "👥 Membro removido:",
+              update.username,
+              "do grupo",
+              update.group.name
+            );
+            // Atualizar lista de grupos
+            refreshGroups(username).then(() => {
+              console.log(
+                "✅ Lista de grupos atualizada após remoção de membro"
+              );
+            });
+          }
+        } catch (error) {
+          console.error("❌ Erro ao processar atualização de grupo:", error);
+        }
+      }
+    );
+
+    return () => {
+      groupUpdatesSub.unsubscribe();
+      console.log("🛑 Parou subscrição de atualizações de grupos");
+    };
+  }, [wsStompClient.current?.connected, isJoined, username, refreshGroups]);
 
   // Carregar histórico quando mudar o chat selecionado
   useEffect(() => {
@@ -781,12 +944,31 @@ export default function ChatLayout() {
             isAutoUpdating={isAutoUpdating}
             messagesEndRef={messagesEndRef}
             groups={groups}
+            onAddMember={handleAddMember}
+            onGroupSettings={handleGroupSettings}
           />
         </div>
         <div className="border-t p-3 flex-shrink-0">
           <MessageInput onSend={sendMessage} />
         </div>
       </main>
+
+      {/* Dialog para adicionar membros */}
+      <UserSelectionDialog
+        isOpen={userSelectionDialog.isOpen}
+        onClose={() =>
+          setUserSelectionDialog({
+            isOpen: false,
+            groupId: "",
+            groupName: "",
+            currentMembers: [],
+          })
+        }
+        onAddMembers={handleAddMembersToGroup}
+        groupName={userSelectionDialog.groupName}
+        currentMembers={userSelectionDialog.currentMembers}
+        isLoading={isLoadingGroups}
+      />
     </div>
   );
 }

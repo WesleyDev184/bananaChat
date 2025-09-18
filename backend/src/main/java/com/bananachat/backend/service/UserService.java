@@ -1,7 +1,9 @@
 package com.bananachat.backend.service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +24,9 @@ public class UserService {
 
   @Autowired
   private UserRepository userRepository;
+
+  @Autowired
+  private OnlineUsersService onlineUsersService;
 
   /**
    * Cria um novo usuário
@@ -145,10 +150,18 @@ public class UserService {
    */
   @Transactional(readOnly = true)
   public List<UserDto> getAllUsers() {
-    return userRepository.findAll()
-        .stream()
-        .map(UserDto::new)
-        .toList();
+    LOGGER.info("Listando todos os usuários do sistema");
+
+    List<User> users = userRepository.findAll();
+    List<String> onlineUsernames = new ArrayList<>(onlineUsersService.getOnlineUsers());
+
+    return users.stream()
+        .map(user -> {
+          UserDto dto = new UserDto(user);
+          dto.setIsOnline(onlineUsernames.contains(user.getUsername()));
+          return dto;
+        })
+        .collect(Collectors.toList());
   }
 
   /**

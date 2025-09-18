@@ -1,9 +1,16 @@
 import FilterDropdown from "@/components/chat/FilterDropdown";
 import UserAvatar from "@/components/chat/UserAvatar";
 import type { ChatMessage, ChatType, GroupDto } from "@/components/chat/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Globe, LoaderCircle, Users } from "lucide-react";
+import { Globe, LoaderCircle, Settings, UserPlus, Users } from "lucide-react";
 import React from "react";
 
 interface MessageWindowProps {
@@ -13,6 +20,8 @@ interface MessageWindowProps {
   isAutoUpdating: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   groups?: GroupDto[];
+  onAddMember?: (groupId: string) => void;
+  onGroupSettings?: (groupId: string) => void;
 }
 
 export default function MessageWindow({
@@ -22,6 +31,8 @@ export default function MessageWindow({
   isAutoUpdating,
   messagesEndRef,
   groups = [],
+  onAddMember,
+  onGroupSettings,
 }: MessageWindowProps) {
   // Filtra mensagens baseado no chat selecionado
   const filteredMessages = messages.filter((msg) => {
@@ -234,22 +245,59 @@ export default function MessageWindow({
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3">
             {selectedChat === "global" ? (
-              <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white text-sm">
-                <Globe className="h-4 w-4" />
+              <div className="size-10 bg-green-600 rounded-full flex items-center justify-center text-white text-sm">
+                <Globe className="h-5 w-5" />
               </div>
             ) : selectedChat.startsWith("group-") ? (
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm">
-                <Users className="h-4 w-4" />
+              <div className="size-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm">
+                <Users className="h-5 w-5" />
               </div>
             ) : (
               <UserAvatar
                 username={selectedChat}
-                size="sm"
+                size="md"
                 showOnlineIndicator={false}
               />
             )}
             <div>
-              <div className="font-semibold">{getChatTitle()}</div>
+              <div className="font-semibold flex items-center gap-2">
+                {(selectedChat.startsWith("group-") &&
+                  (() => {
+                    const groupId = selectedChat.split("-")[1];
+                    const group = groups?.find(
+                      (g) => g.id.toString() === groupId
+                    );
+                    const isOwner = group?.owner?.username === currentUsername;
+
+                    return isOwner ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="hover:text-primary transition-colors">
+                            {getChatTitle()}
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem
+                            onClick={() => onAddMember?.(groupId)}
+                          >
+                            <UserPlus className="mr-2 h-4 w-4" />
+                            Adicionar Membros
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => onGroupSettings?.(groupId)}
+                          >
+                            <Settings className="mr-2 h-4 w-4" />
+                            Configurações
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <span>{getChatTitle()}</span>
+                    );
+                  })()) ||
+                  getChatTitle()}
+              </div>
               <div className="text-sm text-muted-foreground">
                 {getChatSubtitle()}
               </div>

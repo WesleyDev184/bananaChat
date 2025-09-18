@@ -1,35 +1,30 @@
 import ConversationList from "@/components/chat/ConversationList";
-import LoginForm from "@/components/chat/LoginForm";
 import MessageInput from "@/components/chat/MessageInput";
 import MessageWindow from "@/components/chat/MessageWindow";
 import type {
   ChatHistoryDto,
   ChatMessage,
   ChatType,
-  ConnectionStatus,
   Conversation,
 } from "@/components/chat/types";
 import { useChatState } from "@/hooks/useChatState";
-import { Client } from "@stomp/stompjs";
-import type React from "react";
+import { useWebSocketConnection } from "@/hooks/useWebSocketConnection";
+import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import SockJS from "sockjs-client";
 
-const WEBSOCKET_URL = "http://localhost:8080/ws-chat";
 const API_BASE_URL = "http://localhost:8080/api";
 
 export default function ChatLayout() {
+  const navigate = useNavigate();
+  const { isConnected, stompClient: wsStompClient } = useWebSocketConnection();
+
   // Estados principais
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [connectionStatus, setConnectionStatus] =
-    useState<ConnectionStatus>("Desconectado");
   const [isJoined, setIsJoined] = useState<boolean>(false);
-  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
   const [isAutoUpdating, setIsAutoUpdating] = useState<boolean>(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   // Refs
-  const stompClient = useRef<Client | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Hook customizado que gerencia estado via URL
@@ -42,144 +37,21 @@ export default function ChatLayout() {
     filterMessages,
   } = useChatState();
 
-  // Função joinChat implementação real
-  const joinChat = useCallback(async () => {
-    if (!username.trim()) {
-      alert("Por favor, digite um nome de usuário");
-      return;
-    }
-
-    if (!stompClient.current || !stompClient.current.connected) {
-      alert("Conexão WebSocket não estabelecida");
-      return;
-    }
-
-    const latestHistory = await fetchChatHistory(selectedChat);
-    const sortedHistory = sortMessagesByTimestamp(latestHistory);
-    setMessages(sortedHistory);
-    setTimeout(() => scrollToBottom(), 200);
-
-    // Mensagem de entrada (sem isNewMessage e timestamp)
-    const joinMessage: ChatMessage = {
-      sender: username,
-      content: `${username} entrou no chat`,
-      type: "JOIN",
-    };
-
-    try {
-      console.log("Enviando mensagem JOIN:", joinMessage);
-      stompClient.current.publish({
-        destination: "/app/chat.addUser",
-        body: JSON.stringify(joinMessage),
-      });
-
-      setIsJoined(true);
-      console.log("Usuário entrou no chat:", username);
-
-      setTimeout(async () => {
-        try {
-          const response = await fetch(`${API_BASE_URL}/users/online`);
-          if (response.ok) {
-            const users: string[] = await response.json();
-            const sortedUsers = users
-              .filter((user) => user !== username)
-              .sort();
-            setOnlineUsers(sortedUsers);
-            console.log(
-              "Lista inicial de usuários online carregada:",
-              sortedUsers
-            );
-          }
-        } catch (error) {
-          console.error("Erro ao carregar usuários online:", error);
-        }
-      }, 1500);
-    } catch (error) {
-      console.error("Erro ao entrar no chat:", error);
-    }
-  }, [username, selectedChat]);
-
-  // Aplicar filtros nas mensagens
-  const filteredMessages = useMemo(() => {
-    return filterMessages(messages);
-  }, [messages, filterMessages]);
-
-  // Auto-join logic
+  // Verificar se o usuário deve ser redirecionado para login
   useEffect(() => {
-    if (username && autoJoin && !isJoined) {
-      joinChat();
-    }
-  }, [username, autoJoin, isJoined]);
-
-  // Função para ordenar mensagens por timestamp (ordem cronológica simples)
-  const sortMessagesByTimestamp = useCallback(
-    (messages: ChatMessage[]): ChatMessage[] => {
-      const sorted = [...messages].sort((a, b) => {
-        if (!a.timestamp && !b.timestamp) return 0;
-        if (!a.timestamp) return 1;
-        if (!b.timestamp) return -1;
-
-        try {
-          const dateA = new Date(a.timestamp);
-          const dateB = new Date(b.timestamp);
-
-          // Verificar se as datas são válidas
-          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-            console.warn("⚠️ Timestamp inválido detectado:", {
-              a: a.timestamp,
-              b: b.timestamp,
-            });
-            return !isNaN(dateA.getTime()) ? -1 : 1;
-          }
-
-          const diff = dateA.getTime() - dateB.getTime();
-
-          // Log para debug quando timestamps são muito próximos
-          if (Math.abs(diff) < 100) {
-            console.log("🔍 Timestamps próximos:", {
-              a: {
-                content: a.content.substring(0, 20),
-                timestamp: a.timestamp,
-                time: dateA.getTime(),
-              },
-              b: {
-                content: b.content.substring(0, 20),
-                timestamp: b.timestamp,
-                time: dateB.getTime(),
-              },
-              diff: diff,
-            });
-          }
-
-          return diff;
-        } catch (error) {
-          console.error("❌ Erro ao comparar timestamps:", error, {
-            a: a.timestamp,
-            b: b.timestamp,
-          });
-          return 0;
-        }
+    // Só redireciona se não tiver username E não tiver autoJoin
+    // Isso permite que usuários acessem o chat diretamente com username na URL
+    if (!username && !autoJoin) {
+      navigate({
+        to: "/login",
+        search: { redirectTo: "/" },
       });
+    }
+  }, [username, autoJoin, navigate]);
 
-      // Log da ordem final
-      console.log(
-        "📊 Ordem final após sort:",
-        sorted.slice(0, 10).map((m, idx) => ({
-          index: idx,
-          type: m.type,
-          content: m.content.substring(0, 25),
-          timestamp: m.timestamp,
-          parsed: m.timestamp ? new Date(m.timestamp).getTime() : "null",
-        }))
-      );
-
-      return sorted;
-    },
-    []
-  ); // Auto scroll para a última mensagem
+  // Auto scroll para a última mensagem
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
-      // Pequeno delay para garantir que o ScrollArea renderizou
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({
           behavior: "smooth",
@@ -190,67 +62,37 @@ export default function ChatLayout() {
     }
   }, []);
 
-  // Scroll automático sempre que as mensagens mudarem
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      scrollToBottom();
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }, [messages, scrollToBottom]);
+  // Função para ordenar mensagens por timestamp
+  const sortMessagesByTimestamp = useCallback(
+    (messages: ChatMessage[]): ChatMessage[] => {
+      return [...messages].sort((a, b) => {
+        if (!a.timestamp && !b.timestamp) return 0;
+        if (!a.timestamp) return 1;
+        if (!b.timestamp) return -1;
 
-  // Sistema otimizado de atualização de timestamps
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMessages((prevMessages) => {
-        const now = new Date();
-        const updatedMessages = prevMessages.map((msg) => {
-          if (msg.isNewMessage && msg.timestamp) {
-            try {
-              const messageTime = new Date(msg.timestamp);
-              const diffInSeconds =
-                (now.getTime() - messageTime.getTime()) / 1000;
+        try {
+          const dateA = new Date(a.timestamp);
+          const dateB = new Date(b.timestamp);
 
-              // Atualiza mensagens de sistema (JOIN/LEAVE) após 15 segundos
-              // Atualiza mensagens de chat após 60 segundos
-              const thresholdSeconds =
-                msg.type === "JOIN" || msg.type === "LEAVE" ? 15 : 60;
-
-              if (diffInSeconds > thresholdSeconds) {
-                console.log(
-                  `⏰ Atualizando timestamp ${msg.type}: ${msg.content} - ${msg.timestamp}`
-                );
-                return { ...msg, isNewMessage: false };
-              }
-            } catch (error) {
-              console.warn(
-                "⚠️ Erro ao processar timestamp:",
-                msg.timestamp,
-                error
-              );
-              // Se há erro no timestamp, remove o flag para evitar loops
-              return { ...msg, isNewMessage: false };
-            }
+          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+            return !isNaN(dateA.getTime()) ? -1 : 1;
           }
-          return msg;
-        });
 
-        const hasChanges = updatedMessages.some(
-          (msg, index) => msg.isNewMessage !== prevMessages[index]?.isNewMessage
-        );
-
-        return hasChanges ? updatedMessages : prevMessages;
+          return dateA.getTime() - dateB.getTime();
+        } catch (error) {
+          console.error("Erro ao comparar timestamps:", error);
+          return 0;
+        }
       });
-    }, 10000); // Verifica a cada 10 segundos (mais responsivo)
-
-    return () => clearInterval(interval);
-  }, []);
+    },
+    []
+  );
 
   // Buscar histórico de chat
   const fetchChatHistory = async (
     chatType: ChatType | string = "global"
   ): Promise<ChatMessage[]> => {
     try {
-      setIsLoadingHistory(true);
       console.log("Buscando histórico para:", chatType);
 
       let url = `${API_BASE_URL}/chat/history`;
@@ -277,273 +119,188 @@ export default function ChatLayout() {
         isNewMessage: false,
       }));
 
-      const sortedMessages = sortMessagesByTimestamp(convertedMessages);
-      console.log(
-        "📜 Histórico carregado - Ordem cronológica:",
-        sortedMessages.map((m) => ({
-          type: m.type,
-          content: m.content.substring(0, 30),
-          timestamp: m.timestamp,
-          sender: m.sender,
-        }))
-      );
-      return sortedMessages;
+      return sortMessagesByTimestamp(convertedMessages);
     } catch (error) {
       console.error("Erro ao buscar histórico:", error);
       return [];
-    } finally {
-      setIsLoadingHistory(false);
     }
   };
 
-  // Conectar ao WebSocket
-  useEffect(() => {
-    const initializeChat = async () => {
-      console.log("🔌 Inicializando chat...");
-      setConnectionStatus("Conectando...");
+  // Função joinChat
+  const joinChat = useCallback(async () => {
+    if (!username.trim() || !wsStompClient.current?.connected) {
+      return;
+    }
 
-      const socket = new SockJS(WEBSOCKET_URL);
-      stompClient.current = new Client({
-        webSocketFactory: () => socket,
-        onConnect: () => {
-          console.log("✅ Conectado ao STOMP");
-          setConnectionStatus("Conectado");
+    const latestHistory = await fetchChatHistory(selectedChat);
+    const sortedHistory = sortMessagesByTimestamp(latestHistory);
+    setMessages(sortedHistory);
+    setTimeout(() => scrollToBottom(), 200);
 
-          if (stompClient.current) {
-            // Subscreve ao tópico público
-            stompClient.current.subscribe("/topic/public", (msg) => {
-              console.log("📨 Mensagem pública recebida:", msg.body);
-              try {
-                const receivedMessage: ChatMessage = JSON.parse(msg.body);
+    const joinMessage: ChatMessage = {
+      sender: username,
+      content: `${username} entrou no chat`,
+      type: "JOIN",
+    };
 
-                // Processa e normaliza o timestamp
-                if (receivedMessage.timestamp) {
-                  // Se o timestamp vem do backend como string, converte para ISO
-                  try {
-                    const date = new Date(receivedMessage.timestamp);
-                    receivedMessage.timestamp = date.toISOString();
-                  } catch (error) {
-                    console.warn(
-                      "⚠️ Erro ao processar timestamp do backend:",
-                      receivedMessage.timestamp
-                    );
-                    receivedMessage.timestamp = new Date().toISOString();
-                  }
-                } else {
-                  // Fallback: usa timestamp atual
-                  receivedMessage.timestamp = new Date().toISOString();
-                }
-
-                receivedMessage.isNewMessage = true;
-
-                console.log("📝 Processando mensagem:", {
-                  tipo: receivedMessage.type,
-                  remetente: receivedMessage.sender,
-                  conteudo: receivedMessage.content,
-                  timestamp: receivedMessage.timestamp,
-                  chatSelecionado: selectedChat,
-                });
-
-                // Atualizar lista de usuários online
-                if (receivedMessage.type === "JOIN") {
-                  if (receivedMessage.sender !== username) {
-                    setOnlineUsers((prev) => {
-                      if (!prev.includes(receivedMessage.sender)) {
-                        console.log(
-                          "👥 Usuário entrou:",
-                          receivedMessage.sender
-                        );
-                        return [...prev, receivedMessage.sender].sort();
-                      }
-                      return prev;
-                    });
-                  }
-                } else if (receivedMessage.type === "LEAVE") {
-                  setOnlineUsers((prev) => {
-                    console.log("👋 Usuário saiu:", receivedMessage.sender);
-                    return prev.filter(
-                      (user) => user !== receivedMessage.sender
-                    );
-                  });
-                }
-
-                // SEMPRE adiciona à lista de mensagens (sem filtro por chat selecionado)
-                // A filtragem será feita no MessageWindow
-                setMessages((prev) => {
-                  // Verifica duplicatas de forma mais simples e rigorosa
-                  const messageExists = prev.some((existingMsg) => {
-                    // Compara timestamp, sender e content para evitar duplicatas
-                    return (
-                      existingMsg.timestamp === receivedMessage.timestamp &&
-                      existingMsg.sender === receivedMessage.sender &&
-                      existingMsg.content === receivedMessage.content &&
-                      existingMsg.type === receivedMessage.type
-                    );
-                  });
-
-                  if (!messageExists) {
-                    console.log(
-                      `💬 Adicionando nova mensagem ${receivedMessage.type}:`,
-                      {
-                        content: receivedMessage.content,
-                        timestamp: receivedMessage.timestamp,
-                        sender: receivedMessage.sender,
-                      }
-                    );
-
-                    const newMessages = [...prev, receivedMessage];
-                    const sortedMessages = sortMessagesByTimestamp(newMessages);
-
-                    // Log para debug da ordem
-                    console.log(
-                      "📋 Ordem atual das mensagens:",
-                      sortedMessages.map((m) => ({
-                        type: m.type,
-                        content: m.content.substring(0, 20),
-                        timestamp: m.timestamp,
-                      }))
-                    );
-
-                    // Force scroll para novas mensagens
-                    setTimeout(() => scrollToBottom(), 100);
-
-                    return sortedMessages;
-                  } else {
-                    console.log(
-                      `⚠️ Mensagem ${receivedMessage.type} duplicada ignorada:`,
-                      receivedMessage.content
-                    );
-                  }
-                  return prev;
-                });
-              } catch (error) {
-                console.error("❌ Erro ao parsear mensagem pública:", error);
-              }
-            });
-          }
-        },
-        onStompError: (frame) => {
-          console.error("❌ Erro STOMP:", frame);
-          setConnectionStatus("Erro STOMP");
-        },
-        onWebSocketError: (error) => {
-          console.error("❌ Erro WebSocket:", error);
-          setConnectionStatus("Erro WebSocket");
-        },
-        onDisconnect: () => {
-          console.log("❌ Desconectado");
-          setConnectionStatus("Desconectado");
-        },
+    try {
+      wsStompClient.current.publish({
+        destination: "/app/chat.addUser",
+        body: JSON.stringify(joinMessage),
       });
 
-      stompClient.current.activate();
-    };
+      setIsJoined(true);
+      console.log("Usuário entrou no chat:", username);
 
-    initializeChat();
+      // Carregar usuários online
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/users/online`);
+          if (response.ok) {
+            const users: string[] = await response.json();
+            const sortedUsers = users
+              .filter((user) => user !== username)
+              .sort();
+            setOnlineUsers(sortedUsers);
+          }
+        } catch (error) {
+          console.error("Erro ao carregar usuários online:", error);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error("Erro ao entrar no chat:", error);
+    }
+  }, [
+    username,
+    selectedChat,
+    wsStompClient,
+    sortMessagesByTimestamp,
+    scrollToBottom,
+  ]);
 
-    return () => {
-      if (stompClient.current) {
-        console.log("🔌 Desativando conexão WebSocket");
-        stompClient.current.deactivate();
-      }
-    };
-  }, [scrollToBottom, sortMessagesByTimestamp]);
+  // Aplicar filtros nas mensagens
+  const filteredMessages = useMemo(() => {
+    return filterMessages(messages);
+  }, [messages, filterMessages]);
 
-  // Subscribir à queue privada quando o usuário entrar
+  // Auto-join logic
   useEffect(() => {
-    if (stompClient.current?.connected && isJoined && username) {
-      const privateQueue = `/queue/private.${username}`;
-      console.log("Subscrevendo à queue privada:", privateQueue);
+    if (username && autoJoin && !isJoined && isConnected) {
+      joinChat();
+    }
+  }, [username, autoJoin, isJoined, isConnected, joinChat]);
 
-      const subscription = stompClient.current.subscribe(
-        privateQueue,
-        (msg) => {
-          console.log("Mensagem privada recebida:", msg.body);
-          try {
-            const receivedMessage: ChatMessage = JSON.parse(msg.body);
+  // Configurar subscriptions WebSocket quando conectado e usuário entrou
+  useEffect(() => {
+    if (!wsStompClient.current?.connected || !isJoined) return;
 
-            // Processa e normaliza o timestamp
-            if (receivedMessage.timestamp) {
-              // Se o timestamp vem do backend como string, converte para ISO
-              try {
-                const date = new Date(receivedMessage.timestamp);
-                receivedMessage.timestamp = date.toISOString();
-              } catch (error) {
-                console.warn(
-                  "⚠️ Erro ao processar timestamp privado:",
-                  receivedMessage.timestamp
-                );
-                receivedMessage.timestamp = new Date().toISOString();
-              }
-            } else {
-              // Fallback: usa timestamp atual
-              receivedMessage.timestamp = new Date().toISOString();
-            }
+    // Subscription para mensagens públicas
+    const publicSub = wsStompClient.current.subscribe(
+      "/topic/public",
+      (msg) => {
+        try {
+          const receivedMessage: ChatMessage = JSON.parse(msg.body);
 
-            receivedMessage.isNewMessage = true;
+          // Normalizar timestamp
+          if (receivedMessage.timestamp) {
+            receivedMessage.timestamp = new Date(
+              receivedMessage.timestamp
+            ).toISOString();
+          } else {
+            receivedMessage.timestamp = new Date().toISOString();
+          }
 
-            console.log("📱 Processando mensagem privada:", {
-              remetente: receivedMessage.sender,
-              destinatario: receivedMessage.recipient,
-              conteudo: receivedMessage.content,
-              timestamp: receivedMessage.timestamp,
-              chatAtual: selectedChat,
-              usuarioAtual: username,
-            });
+          receivedMessage.isNewMessage = true;
 
-            // SEMPRE adiciona mensagens privadas (sem filtro por chat selecionado)
-            setMessages((prev) => {
-              // Evita duplicatas verificando se a mensagem já existe
-              const messageExists = prev.some(
-                (existingMsg) =>
-                  existingMsg.sender === receivedMessage.sender &&
-                  existingMsg.content === receivedMessage.content &&
-                  existingMsg.timestamp === receivedMessage.timestamp &&
-                  existingMsg.recipient === receivedMessage.recipient
-              );
-
-              if (!messageExists) {
-                console.log("💬 Adicionando mensagem privada:", {
-                  content: receivedMessage.content,
-                  timestamp: receivedMessage.timestamp,
-                  sender: receivedMessage.sender,
-                });
-
-                const newMessages = [...prev, receivedMessage];
-                const sortedMessages = sortMessagesByTimestamp(newMessages);
-
-                // Log para debug da ordem
-                console.log(
-                  "📋 Ordem atual das mensagens (com privada):",
-                  sortedMessages.map((m) => ({
-                    type: m.type,
-                    content: m.content.substring(0, 20),
-                    timestamp: m.timestamp,
-                  }))
-                );
-
-                setTimeout(() => scrollToBottom(), 100);
-                return sortedMessages;
+          // Atualizar usuários online
+          if (
+            receivedMessage.type === "JOIN" &&
+            receivedMessage.sender !== username
+          ) {
+            setOnlineUsers((prev) => {
+              if (!prev.includes(receivedMessage.sender)) {
+                return [...prev, receivedMessage.sender].sort();
               }
               return prev;
             });
-          } catch (error) {
-            console.error("Erro ao parsear mensagem privada:", error);
+          } else if (receivedMessage.type === "LEAVE") {
+            setOnlineUsers((prev) =>
+              prev.filter((user) => user !== receivedMessage.sender)
+            );
           }
-        }
-      );
 
-      return () => {
-        subscription.unsubscribe();
-      };
-    }
+          // Adicionar mensagem
+          setMessages((prev) => {
+            const messageExists = prev.some(
+              (existingMsg) =>
+                existingMsg.timestamp === receivedMessage.timestamp &&
+                existingMsg.sender === receivedMessage.sender &&
+                existingMsg.content === receivedMessage.content &&
+                existingMsg.type === receivedMessage.type
+            );
+
+            if (!messageExists) {
+              const newMessages = [...prev, receivedMessage];
+              setTimeout(() => scrollToBottom(), 100);
+              return sortMessagesByTimestamp(newMessages);
+            }
+            return prev;
+          });
+        } catch (error) {
+          console.error("Erro ao processar mensagem pública:", error);
+        }
+      }
+    );
+
+    // Subscription para mensagens privadas
+    const privateSub = wsStompClient.current.subscribe(
+      `/queue/private.${username}`,
+      (msg) => {
+        try {
+          const receivedMessage: ChatMessage = JSON.parse(msg.body);
+
+          if (receivedMessage.timestamp) {
+            receivedMessage.timestamp = new Date(
+              receivedMessage.timestamp
+            ).toISOString();
+          } else {
+            receivedMessage.timestamp = new Date().toISOString();
+          }
+
+          receivedMessage.isNewMessage = true;
+
+          setMessages((prev) => {
+            const messageExists = prev.some(
+              (existingMsg) =>
+                existingMsg.sender === receivedMessage.sender &&
+                existingMsg.content === receivedMessage.content &&
+                existingMsg.timestamp === receivedMessage.timestamp &&
+                existingMsg.recipient === receivedMessage.recipient
+            );
+
+            if (!messageExists) {
+              const newMessages = [...prev, receivedMessage];
+              setTimeout(() => scrollToBottom(), 100);
+              return sortMessagesByTimestamp(newMessages);
+            }
+            return prev;
+          });
+        } catch (error) {
+          console.error("Erro ao processar mensagem privada:", error);
+        }
+      }
+    );
+
+    return () => {
+      publicSub.unsubscribe();
+      privateSub.unsubscribe();
+    };
   }, [
-    stompClient.current?.connected,
+    wsStompClient.current?.connected,
     isJoined,
     username,
-    selectedChat,
-    scrollToBottom,
     sortMessagesByTimestamp,
+    scrollToBottom,
   ]);
 
   // Carregar histórico quando mudar o chat selecionado
@@ -555,20 +312,51 @@ export default function ChatLayout() {
         setTimeout(() => scrollToBottom(), 150);
       };
       loadHistory();
-
-      // Marcar mensagens como lidas do chat selecionado
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (selectedChat === "global" && !msg.recipient) {
-            return { ...msg, isNewMessage: false };
-          } else if (selectedChat !== "global" && msg.sender === selectedChat) {
-            return { ...msg, isNewMessage: false };
-          }
-          return msg;
-        })
-      );
     }
   }, [selectedChat, isJoined]);
+
+  // Scroll automático sempre que as mensagens mudarem
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      scrollToBottom();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [messages, scrollToBottom]);
+
+  // Sistema de atualização de timestamps
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessages((prevMessages) => {
+        const now = new Date();
+        const updatedMessages = prevMessages.map((msg) => {
+          if (msg.isNewMessage && msg.timestamp) {
+            try {
+              const messageTime = new Date(msg.timestamp);
+              const diffInSeconds =
+                (now.getTime() - messageTime.getTime()) / 1000;
+              const thresholdSeconds =
+                msg.type === "JOIN" || msg.type === "LEAVE" ? 15 : 60;
+
+              if (diffInSeconds > thresholdSeconds) {
+                return { ...msg, isNewMessage: false };
+              }
+            } catch (error) {
+              return { ...msg, isNewMessage: false };
+            }
+          }
+          return msg;
+        });
+
+        const hasChanges = updatedMessages.some(
+          (msg, index) => msg.isNewMessage !== prevMessages[index]?.isNewMessage
+        );
+
+        return hasChanges ? updatedMessages : prevMessages;
+      });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Sincronização periódica dos usuários online
   useEffect(() => {
@@ -580,19 +368,13 @@ export default function ChatLayout() {
           if (response.ok) {
             const users: string[] = await response.json();
             const filteredUsers = users.filter((user) => user !== username);
-
             setOnlineUsers((prevUsers) => {
               const prevSet = new Set(prevUsers);
               const newSet = new Set(filteredUsers);
-
               if (
                 prevSet.size !== newSet.size ||
                 [...prevSet].some((user) => !newSet.has(user))
               ) {
-                console.log(
-                  "Lista de usuários online atualizada:",
-                  filteredUsers
-                );
                 return filteredUsers.sort();
               }
               return prevUsers;
@@ -613,35 +395,27 @@ export default function ChatLayout() {
 
   // Enviar mensagem
   const sendMessage = (messageInput: string) => {
-    if (!messageInput.trim()) return;
+    if (!messageInput.trim() || !wsStompClient.current?.connected) return;
 
-    if (!stompClient.current || !stompClient.current.connected) {
-      console.error("Cliente STOMP não está conectado");
-      return;
-    }
-
-    // Mensagem para enviar ao backend (sem isNewMessage)
     const message: ChatMessage = {
       sender: username,
       content: messageInput,
       type: "CHAT",
-      // Não enviamos timestamp - deixamos o backend definir
     };
 
     try {
       if (selectedChat === "global") {
-        stompClient.current.publish({
+        wsStompClient.current.publish({
           destination: "/app/chat.sendMessage",
           body: JSON.stringify(message),
         });
       } else {
         message.recipient = selectedChat as string;
-        stompClient.current.publish({
+        wsStompClient.current.publish({
           destination: "/app/chat.sendPrivateMessage",
           body: JSON.stringify(message),
         });
       }
-      console.log("Mensagem enviada:", message);
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
     }
@@ -649,15 +423,14 @@ export default function ChatLayout() {
 
   // Sair do chat
   const leaveChat = () => {
-    if (stompClient.current?.connected) {
-      // Mensagem de saída (sem isNewMessage e timestamp)
+    if (wsStompClient.current?.connected) {
       const leaveMessage: ChatMessage = {
         sender: username,
         content: `${username} saiu do chat`,
         type: "LEAVE",
       };
 
-      stompClient.current.publish({
+      wsStompClient.current.publish({
         destination: "/app/chat.sendMessage",
         body: JSON.stringify(leaveMessage),
       });
@@ -667,16 +440,9 @@ export default function ChatLayout() {
     setMessages([]);
     setOnlineUsers([]);
     setSelectedChat("global");
-  };
 
-  // Lidar com Enter no input
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (!isJoined) {
-        joinChat();
-      }
-    }
+    // Redirecionar para login
+    navigate({ to: "/login" });
   };
 
   // Criar conversas para o ConversationList
@@ -687,7 +453,7 @@ export default function ChatLayout() {
       lastMessage:
         filteredMessages.filter((m) => !m.recipient).slice(-1)[0]?.content ||
         "Seja bem-vindo!",
-      messages: [], // O MessageWindow vai usar filteredMessages diretamente
+      messages: [],
       unreadCount:
         selectedChat === "global"
           ? 0
@@ -718,17 +484,16 @@ export default function ChatLayout() {
     })),
   ];
 
-  // Se o usuário ainda não entrou no chat
-  if (!isJoined) {
+  // Se o usuário não tem username, mostra loading enquanto redireciona
+  if (!username) {
     return (
-      <LoginForm
-        username={username}
-        setUsername={setUsername}
-        connectionStatus={connectionStatus}
-        isLoadingHistory={isLoadingHistory}
-        onJoinChat={joinChat}
-        onKeyPress={handleKeyPress}
-      />
+      <div className="h-full w-full rounded-lg border bg-background shadow-sm flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-sm text-muted-foreground">
+            Redirecionando para login...
+          </div>
+        </div>
+      </div>
     );
   }
 

@@ -22,7 +22,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
   @Override
   public void configureMessageBroker(MessageBrokerRegistry config) {
-    // Habilita o broker ActiveMQ em vez do simple broker
     // Configura o broker externo do ActiveMQ
     config.enableStompBrokerRelay("/topic", "/queue")
         .setRelayHost(extractHostFromBrokerUrl(activeMqBrokerUrl))

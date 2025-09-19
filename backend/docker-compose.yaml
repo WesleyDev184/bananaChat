@@ -18,6 +18,35 @@ services:
     volumes:
       - activemq-data:/opt/apache-activemq-6.1.2/data
       - activemq-conf:/opt/apache-activemq-6.1.2/conf
+    networks:
+      - bananachat-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bananachat-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Configurações para conectar com o ActiveMQ no Docker
+      - SPRING_ACTIVEMQ_BROKER_URL=tcp://activemq:61616
+      - SPRING_ACTIVEMQ_USER=admin
+      - SPRING_ACTIVEMQ_PASSWORD=admin
+      # Configurações do banco H2
+      - SPRING_DATASOURCE_URL=jdbc:h2:mem:chatdb
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=password
+    depends_on:
+      - activemq
+    networks:
+      - bananachat-network
+    # Aguarda o ActiveMQ estar pronto antes de iniciar
+    restart: on-failure
+
+networks:
+  bananachat-network:
+    driver: bridge
 
 volumes:
   activemq-data:

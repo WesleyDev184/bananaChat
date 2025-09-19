@@ -183,12 +183,8 @@ export default function ChatLayout() {
           groupName: "",
           currentMembers: [],
         });
-
-        console.log(
-          `✅ ${usernamesToAdd.length} usuário(s) adicionado(s) ao grupo ${userSelectionDialog.groupName}`
-        );
       } catch (error) {
-        console.error("❌ Erro ao adicionar membros:", error);
+        console.error("Erro ao adicionar membros:", error);
         // TODO: Mostrar toast de erro
       }
     },
@@ -220,13 +216,11 @@ export default function ChatLayout() {
 
         if (response.ok) {
           await refreshGroups(username);
-          console.log(`✅ Grupo atualizado com sucesso!`);
         } else {
           throw new Error("Erro ao atualizar grupo");
         }
       } catch (error) {
         console.error("Erro ao atualizar grupo:", error);
-        console.log("❌ Erro ao atualizar grupo");
       }
     },
     [refreshGroups, username]
@@ -244,13 +238,12 @@ export default function ChatLayout() {
 
         if (response.ok) {
           await refreshGroups(username);
-          console.log(`✅ ${usernameToRemove} removido do grupo`);
+          console.log(`${usernameToRemove} removido do grupo`);
         } else {
           throw new Error("Erro ao remover membro");
         }
       } catch (error) {
         console.error("Erro ao remover membro:", error);
-        console.log("❌ Erro ao remover membro");
       }
     },
     [refreshGroups, username]
@@ -269,7 +262,6 @@ export default function ChatLayout() {
         if (response.ok) {
           await refreshGroups(username);
           setSelectedChat(""); // Deselecionar o chat
-          console.log(`✅ Grupo deletado com sucesso!`);
           setGroupSettingsDialog({
             isOpen: false,
             groupId: "",
@@ -282,7 +274,6 @@ export default function ChatLayout() {
         }
       } catch (error) {
         console.error("Erro ao deletar grupo:", error);
-        console.log("❌ Erro ao deletar grupo");
       }
     },
     [refreshGroups, setSelectedChat, username]
@@ -336,16 +327,6 @@ export default function ChatLayout() {
         }
       });
 
-      console.log(
-        "📊 Mensagens ordenadas:",
-        sorted.map((s) => ({
-          sender: s.sender,
-          content: s.content.substring(0, 20),
-          timestamp: s.timestamp,
-          date: new Date(s.timestamp || 0).toLocaleString(),
-        }))
-      );
-
       return sorted;
     },
     []
@@ -356,8 +337,6 @@ export default function ChatLayout() {
     chatType: ChatType | string = "global"
   ): Promise<ChatMessage[]> => {
     try {
-      console.log("Buscando histórico para:", chatType);
-
       let url = `${API_BASE_URL}/chat/history`;
       if (chatType === "global") {
         url = `${API_BASE_URL}/chat/history/public`;
@@ -380,9 +359,7 @@ export default function ChatLayout() {
       let convertedMessages: ChatMessage[];
 
       if (chatType.startsWith("group-")) {
-        // Para grupos, a resposta tem estrutura diferente
         const groupMessages = await response.json();
-        console.log("Mensagens do grupo recebidas:", groupMessages);
         convertedMessages = groupMessages.map((item: any) => ({
           sender: item.sender?.username || item.sender,
           recipient: `group-${item.groupId}`,
@@ -479,7 +456,6 @@ export default function ChatLayout() {
       });
 
       setIsJoined(true);
-      console.log("Usuário entrou no chat:", username);
 
       // Carregar usuários online
       setTimeout(async () => {
@@ -523,9 +499,8 @@ export default function ChatLayout() {
   // Carregar grupos quando o usuário faz login
   useEffect(() => {
     if (username && isJoined) {
-      console.log("🔄 Carregando grupos para usuário:", username);
       refreshGroups(username).then(() => {
-        console.log("✅ Grupos recarregados para:", username);
+        console.log("Grupos recarregados para:", username);
       });
     }
   }, [username, isJoined, refreshGroups]);
@@ -535,19 +510,17 @@ export default function ChatLayout() {
     if (!username || !isJoined) return;
 
     const refreshInterval = setInterval(() => {
-      console.log("🔄 Atualizando lista de grupos automaticamente...");
       refreshGroups(username)
         .then(() => {
-          console.log("✅ Lista de grupos atualizada automaticamente");
+          console.log("Lista de grupos atualizada automaticamente");
         })
         .catch((error) => {
-          console.error("❌ Erro ao atualizar grupos automaticamente:", error);
+          console.error("Erro ao atualizar grupos automaticamente:", error);
         });
     }, 30000); // Atualiza a cada 30 segundos
 
     return () => {
       clearInterval(refreshInterval);
-      console.log("🛑 Parou atualização automática de grupos");
     };
   }, [username, isJoined, refreshGroups]);
 
@@ -654,21 +627,13 @@ export default function ChatLayout() {
 
     // Subscription para mensagens de grupo - só para grupos do usuário
     const groupSubs: any[] = [];
-    console.log("🔍 Configurando subscriptions para grupos:", groups);
-    console.log("🔍 Total de grupos:", groups.length);
-    console.log("🔍 Usuário atual:", username);
 
     groups.forEach((group) => {
-      console.log(
-        `🔍 Verificando grupo ${group.id} (${group.name}): isMember=${group.isUserMember}, owner=${group.owner?.username}`
-      );
       if (group.isUserMember) {
         // Só se inscrever em grupos dos quais o usuário é membro
         const groupTopic = `/topic/group.${group.id}`;
-        console.log(`🔗 Tentando inscrever no tópico: ${groupTopic}`);
         const groupSub = wsStompClient.current?.subscribe(groupTopic, (msg) => {
           try {
-            console.log(`Mensagem recebida no tópico ${groupTopic}:`, msg.body);
             const receivedGroupMessage = JSON.parse(msg.body);
 
             // Converter GroupChatMessage para ChatMessage
@@ -689,8 +654,6 @@ export default function ChatLayout() {
               receivedMessage.timestamp = new Date().toISOString();
             }
 
-            console.log("Mensagem de grupo convertida:", receivedMessage);
-
             setMessages((prev) => {
               const messageExists = prev.some(
                 (existingMsg) =>
@@ -701,12 +664,9 @@ export default function ChatLayout() {
               );
 
               if (!messageExists) {
-                console.log("Adicionando nova mensagem de grupo ao estado");
                 const newMessages = [...prev, receivedMessage];
                 setTimeout(() => scrollToBottom(), 100);
                 return sortMessagesByTimestamp(newMessages);
-              } else {
-                console.log("Mensagem de grupo já existe, ignorando");
               }
               return prev;
             });
@@ -717,18 +677,7 @@ export default function ChatLayout() {
 
         if (groupSub) {
           groupSubs.push(groupSub);
-          console.log(
-            `✅ Inscrito no grupo ${group.id}: ${group.name} (tópico: ${groupTopic})`
-          );
-        } else {
-          console.error(
-            `❌ Falha ao inscrever no grupo ${group.id}: ${group.name}`
-          );
         }
-      } else {
-        console.log(
-          `⏭️ Pulando grupo ${group.id} (${group.name}): usuário não é membro`
-        );
       }
     });
 
@@ -754,50 +703,31 @@ export default function ChatLayout() {
       (msg) => {
         try {
           const update = JSON.parse(msg.body);
-          console.log("📢 Atualização de grupo recebida:", update);
 
           if (update.action === "GROUP_CREATED") {
-            console.log("🆕 Novo grupo criado:", update.group);
             // Atualizar lista de grupos
             refreshGroups(username).then(() => {
-              console.log("✅ Lista de grupos atualizada após criação");
+              console.log("Lista de grupos atualizada após criação");
             });
           } else if (update.action === "MEMBER_ADDED") {
-            console.log(
-              "👥 Membro adicionado:",
-              update.username,
-              "ao grupo",
-              update.group.name
-            );
             // Atualizar lista de grupos
             refreshGroups(username).then(() => {
-              console.log(
-                "✅ Lista de grupos atualizada após adição de membro"
-              );
+              console.log("Lista de grupos atualizada após adição de membro");
             });
           } else if (update.action === "MEMBER_REMOVED") {
-            console.log(
-              "👥 Membro removido:",
-              update.username,
-              "do grupo",
-              update.group.name
-            );
             // Atualizar lista de grupos
             refreshGroups(username).then(() => {
-              console.log(
-                "✅ Lista de grupos atualizada após remoção de membro"
-              );
+              console.log("Lista de grupos atualizada após remoção de membro");
             });
           }
         } catch (error) {
-          console.error("❌ Erro ao processar atualização de grupo:", error);
+          console.error("Erro ao processar atualização de grupo:", error);
         }
       }
     );
 
     return () => {
       groupUpdatesSub.unsubscribe();
-      console.log("🛑 Parou subscrição de atualizações de grupos");
     };
   }, [wsStompClient.current?.connected, isJoined, username, refreshGroups]);
 
@@ -806,17 +736,7 @@ export default function ChatLayout() {
     if (isJoined) {
       const loadHistory = async () => {
         const history = await fetchChatHistory(selectedChat);
-        console.log(
-          "🔍 História carregada para",
-          selectedChat,
-          ":",
-          history.map((h) => ({
-            sender: h.sender,
-            content: h.content.substring(0, 30),
-            timestamp: h.timestamp,
-            timestampDate: new Date(h.timestamp || 0).toLocaleString(),
-          }))
-        );
+
         setMessages(history);
         setTimeout(() => scrollToBottom(), 150);
       };
@@ -914,7 +834,6 @@ export default function ChatLayout() {
 
     try {
       if (selectedChat === "global") {
-        console.log("Enviando mensagem global:", message);
         wsStompClient.current.publish({
           destination: "/app/chat.sendMessage",
           body: JSON.stringify(message),
@@ -929,11 +848,6 @@ export default function ChatLayout() {
           groupId: parseInt(groupId),
           timestamp: new Date().toISOString(),
         };
-        console.log(
-          "Enviando mensagem de grupo:",
-          groupMessage,
-          "para destino: /app/group.sendMessage"
-        );
         wsStompClient.current.publish({
           destination: "/app/group.sendMessage",
           body: JSON.stringify(groupMessage),
@@ -941,7 +855,6 @@ export default function ChatLayout() {
       } else {
         // Enviar mensagem privada
         message.recipient = selectedChat as string;
-        console.log("Enviando mensagem privada:", message);
         wsStompClient.current.publish({
           destination: "/app/chat.sendPrivateMessage",
           body: JSON.stringify(message),

@@ -25,33 +25,33 @@ export function useWebSocketConnection(): UseWebSocketConnectionReturn {
       return; // Já conectado
     }
 
-    console.log("🔌 Inicializando conexão WebSocket...");
-    console.log("🌐 URL do WebSocket:", WEBSOCKET_URL);
+    console.log("Inicializando conexão WebSocket...");
+    console.log("URL do WebSocket:", WEBSOCKET_URL);
     setConnectionStatus("Conectando...");
     setIsLoadingHistory(true);
 
     const socket = new SockJS(WEBSOCKET_URL);
-    console.log("🔗 SockJS criado:", socket);
+    console.log("SockJS criado:", socket);
     stompClient.current = new Client({
       webSocketFactory: () => socket,
       onConnect: (frame) => {
-        console.log("✅ Conectado ao STOMP!", frame);
-        console.log("🔧 Cliente STOMP ativo:", stompClient.current);
+        console.log("Conectado ao STOMP!", frame);
+        console.log("Cliente STOMP ativo:", stompClient.current);
         setConnectionStatus("Conectado");
         setIsLoadingHistory(false);
       },
       onStompError: (frame) => {
-        console.error("❌ Erro STOMP:", frame);
+        console.error("Erro STOMP:", frame);
         setConnectionStatus("Erro STOMP");
         setIsLoadingHistory(false);
       },
       onWebSocketError: (error) => {
-        console.error("❌ Erro WebSocket:", error);
+        console.error("Erro WebSocket:", error);
         setConnectionStatus("Erro WebSocket");
         setIsLoadingHistory(false);
       },
       onDisconnect: () => {
-        console.log("❌ Desconectado");
+        console.log("Desconectado");
         setConnectionStatus("Desconectado");
         setIsLoadingHistory(false);
       },
@@ -62,7 +62,7 @@ export function useWebSocketConnection(): UseWebSocketConnectionReturn {
 
   const disconnect = useCallback(() => {
     if (stompClient.current) {
-      console.log("🔌 Desativando conexão WebSocket");
+      console.log("Desativando conexão WebSocket");
       stompClient.current.deactivate();
       stompClient.current = null;
       setConnectionStatus("Desconectado");

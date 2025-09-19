@@ -54,8 +54,6 @@ export default function UserSelectionDialog({
       if (response.ok) {
         const userData: UserInfo[] = await response.json();
         setUsers(userData);
-      } else {
-        console.error("Erro ao carregar usuários:", response.statusText);
       }
     } catch (error) {
       console.error("Erro ao carregar usuários:", error);

@@ -52,7 +52,7 @@ public class ChatController {
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(@Payload ChatMessage chatMessage) {
         long startNanos = System.nanoTime();
-        LOGGER.info("🚀 Mensagem recebida via WebSocket: {}", chatMessage.getContent());
+        LOGGER.info("Mensagem recebida via WebSocket: {}", chatMessage.getContent());
 
         // Garante que o timestamp seja sempre definido no servidor com precisão de
         // nanosegundos
@@ -60,7 +60,7 @@ public class ChatController {
         chatMessage.setTimestamp(now);
 
         long timestampNanos = System.nanoTime();
-        LOGGER.info("⏰ Timestamp definido: {} (processamento: {}ns) para mensagem: {}",
+        LOGGER.info("Timestamp definido: {} (processamento: {}ns) para mensagem: {}",
                 now, timestampNanos - startNanos, chatMessage.getContent());
 
         // Salva a mensagem no histórico
@@ -70,7 +70,7 @@ public class ChatController {
         messagingTemplate.convertAndSend("/topic/public", chatMessage);
 
         long endNanos = System.nanoTime();
-        LOGGER.info("📤 Mensagem enviada com timestamp: {} (tempo total: {}ns)",
+        LOGGER.info("Mensagem enviada com timestamp: {} (tempo total: {}ns)",
                 chatMessage.getTimestamp(), endNanos - startNanos);
     }
 
@@ -84,14 +84,14 @@ public class ChatController {
     @MessageMapping("/chat.addUser")
     public void addUser(@Payload ChatMessage chatMessage, SimpMessageHeaderAccessor headerAccessor) {
         long startNanos = System.nanoTime();
-        LOGGER.info("👤 Novo usuário entrando no chat: {}", chatMessage.getSender());
+        LOGGER.info("Novo usuário entrando no chat: {}", chatMessage.getSender());
 
         // Garante que o timestamp seja sempre definido no servidor com precisão
         LocalDateTime now = LocalDateTime.now();
         chatMessage.setTimestamp(now);
 
         long timestampNanos = System.nanoTime();
-        LOGGER.info("⏰ Timestamp definido: {} (processamento: {}ns) para entrada do usuário: {}",
+        LOGGER.info("Timestamp definido: {} (processamento: {}ns) para entrada do usuário: {}",
                 now, timestampNanos - startNanos, chatMessage.getSender());
 
         // Adiciona o nome de usuário na sessão do WebSocket
@@ -126,7 +126,7 @@ public class ChatController {
     @MessageMapping("/chat.sendPrivateMessage")
     public void sendPrivateMessage(@Payload ChatMessage chatMessage) {
         long startNanos = System.nanoTime();
-        LOGGER.info("🔒 Mensagem privada recebida: {} -> {}: {}",
+        LOGGER.info("Mensagem privada recebida: {} -> {}: {}",
                 chatMessage.getSender(), chatMessage.getRecipient(), chatMessage.getContent());
 
         // Garante que o timestamp seja sempre definido no servidor com precisão
@@ -134,7 +134,7 @@ public class ChatController {
         chatMessage.setTimestamp(now);
 
         long timestampNanos = System.nanoTime();
-        LOGGER.info("⏰ Timestamp definido: {} (processamento: {}ns) para mensagem privada: {}",
+        LOGGER.info("Timestamp definido: {} (processamento: {}ns) para mensagem privada: {}",
                 now, timestampNanos - startNanos, chatMessage.getContent());
 
         // Salva a mensagem no histórico
@@ -144,16 +144,16 @@ public class ChatController {
         if (chatMessage.getRecipient() != null) {
             String privateQueueRecipient = "/queue/private." + chatMessage.getRecipient();
             messagingTemplate.convertAndSend(privateQueueRecipient, chatMessage);
-            LOGGER.info("📤 Mensagem privada enviada para destinatário: {}", privateQueueRecipient);
+            LOGGER.info("Mensagem privada enviada para destinatário: {}", privateQueueRecipient);
 
             // IMPORTANTE: Também envia para o remetente para que ele veja sua própria
             // mensagem
             String privateQueueSender = "/queue/private." + chatMessage.getSender();
             messagingTemplate.convertAndSend(privateQueueSender, chatMessage);
-            LOGGER.info("📤 Mensagem privada enviada para remetente: {}", privateQueueSender);
+            LOGGER.info("Mensagem privada enviada para remetente: {}", privateQueueSender);
 
             long endNanos = System.nanoTime();
-            LOGGER.info("📤 Mensagem privada processada com timestamp: {} (tempo total: {}ns)",
+            LOGGER.info("Mensagem privada processada com timestamp: {} (tempo total: {}ns)",
                     chatMessage.getTimestamp(), endNanos - startNanos);
         }
     }
@@ -168,7 +168,7 @@ public class ChatController {
     @MessageMapping("/group.sendMessage")
     public void sendGroupMessage(@Payload GroupChatMessage groupMessage) {
         long startNanos = System.nanoTime();
-        LOGGER.info("🚀 Mensagem de grupo recebida: {} no grupo ID: {} do usuário: {}",
+        LOGGER.info("Mensagem de grupo recebida: {} no grupo ID: {} do usuário: {}",
                 groupMessage.getContent(), groupMessage.getGroupId(), groupMessage.getSender());
 
         // Garante que o timestamp seja sempre definido no servidor
@@ -178,47 +178,47 @@ public class ChatController {
         try {
             // Debug: Verificar se o usuário existe
             if (!userService.validateUser(groupMessage.getSender())) {
-                LOGGER.error("❌ Usuário {} não encontrado no sistema", groupMessage.getSender());
+                LOGGER.error("Usuário {} não encontrado no sistema", groupMessage.getSender());
                 return;
             }
 
             // Debug: Verificar se o grupo existe
             if (!groupService.findGroupEntityById(groupMessage.getGroupId()).isPresent()) {
-                LOGGER.error("❌ Grupo ID {} não encontrado", groupMessage.getGroupId());
+                LOGGER.error("Grupo ID {} não encontrado", groupMessage.getGroupId());
                 return;
             }
 
             // Verificar se o usuário é membro do grupo
             boolean isMember = groupService.isUserMemberOfGroup(groupMessage.getGroupId(), groupMessage.getSender());
-            LOGGER.info("🔍 Verificação de membro: usuário {} no grupo {} = {}",
+            LOGGER.info("Verificação de membro: usuário {} no grupo {} = {}",
                     groupMessage.getSender(), groupMessage.getGroupId(), isMember);
 
             if (!isMember) {
-                LOGGER.warn("❌ Usuário {} não é membro do grupo {}", groupMessage.getSender(),
+                LOGGER.warn("Usuário {} não é membro do grupo {}", groupMessage.getSender(),
                         groupMessage.getGroupId());
                 return;
             }
 
             // Salvar a mensagem no banco
-            LOGGER.info("💾 Salvando mensagem no banco...");
+            LOGGER.info("Salvando mensagem no banco...");
             groupMessageService.saveMessage(
                     groupMessage.getContent(),
                     groupMessage.getSender(),
                     groupMessage.getGroupId(),
                     GroupMessage.MessageType.valueOf(groupMessage.getType().name()));
-            LOGGER.info("✅ Mensagem salva no banco com sucesso");
+            LOGGER.info("Mensagem salva no banco com sucesso");
 
             // Enviar para todos os membros do grupo
             String groupTopic = "/topic/group." + groupMessage.getGroupId();
-            LOGGER.info("📡 Enviando mensagem para tópico: {}", groupTopic);
+            LOGGER.info("Enviando mensagem para tópico: {}", groupTopic);
             messagingTemplate.convertAndSend(groupTopic, groupMessage);
 
             long endNanos = System.nanoTime();
-            LOGGER.info("✅ Mensagem de grupo enviada para tópico: {} (tempo total: {}ns)",
+            LOGGER.info("Mensagem de grupo enviada para tópico: {} (tempo total: {}ns)",
                     groupTopic, endNanos - startNanos);
 
         } catch (Exception e) {
-            LOGGER.error("❌ Erro ao processar mensagem de grupo: {}", e.getMessage(), e);
+            LOGGER.error("Erro ao processar mensagem de grupo: {}", e.getMessage(), e);
         }
     }
 
@@ -232,7 +232,7 @@ public class ChatController {
     @MessageMapping("/group.joinGroup")
     public void joinGroup(@Payload GroupChatMessage groupMessage) {
         long startNanos = System.nanoTime();
-        LOGGER.info("👤 Usuário {} entrando no grupo ID: {}", groupMessage.getSender(), groupMessage.getGroupId());
+        LOGGER.info("Usuário {} entrando no grupo ID: {}", groupMessage.getSender(), groupMessage.getGroupId());
 
         // Garante que o timestamp seja sempre definido no servidor
         LocalDateTime now = LocalDateTime.now();
@@ -261,7 +261,7 @@ public class ChatController {
             messagingTemplate.convertAndSend(groupTopic, groupMessage);
 
             long endNanos = System.nanoTime();
-            LOGGER.info("📤 Usuário {} entrou no grupo {} (tempo total: {}ns)",
+            LOGGER.info("Usuário {} entrou no grupo {} (tempo total: {}ns)",
                     groupMessage.getSender(), groupMessage.getGroupId(), endNanos - startNanos);
 
         } catch (Exception e) {
@@ -279,7 +279,7 @@ public class ChatController {
     @MessageMapping("/group.leaveGroup")
     public void leaveGroup(@Payload GroupChatMessage groupMessage) {
         long startNanos = System.nanoTime();
-        LOGGER.info("👤 Usuário {} saindo do grupo ID: {}", groupMessage.getSender(), groupMessage.getGroupId());
+        LOGGER.info("Usuário {} saindo do grupo ID: {}", groupMessage.getSender(), groupMessage.getGroupId());
 
         // Garante que o timestamp seja sempre definido no servidor
         LocalDateTime now = LocalDateTime.now();
@@ -299,7 +299,7 @@ public class ChatController {
             messagingTemplate.convertAndSend(groupTopic, groupMessage);
 
             long endNanos = System.nanoTime();
-            LOGGER.info("📤 Usuário {} saiu do grupo {} (tempo total: {}ns)",
+            LOGGER.info("Usuário {} saiu do grupo {} (tempo total: {}ns)",
                     groupMessage.getSender(), groupMessage.getGroupId(), endNanos - startNanos);
 
         } catch (Exception e) {

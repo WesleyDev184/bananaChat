@@ -5,12 +5,25 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useMessageFilters } from "@/hooks/useMessageFilters";
-import { MoreHorizontal, Search, X } from "lucide-react";
+import {
+  BarChart3,
+  Calendar,
+  Clock,
+  LogOut,
+  MessageCircle,
+  MoreHorizontal,
+  Search,
+  TrendingUp,
+  UserPlus,
+  X,
+} from "lucide-react";
 
 export default function FilterDropdown() {
   const {
@@ -28,6 +41,10 @@ export default function FilterDropdown() {
     } else {
       setMessageTypes([...messageTypes, type]);
     }
+  };
+
+  const handlePeriodChange = (value: string) => {
+    setPeriod(value as "today" | "week" | "month" | "all");
   };
 
   const clearFilters = () => {
@@ -50,10 +67,28 @@ export default function FilterDropdown() {
             </Badge>
           )}
           {period !== "all" && (
-            <Badge variant="secondary" className="h-5 text-xs">
-              {period === "today" && "📅 Hoje"}
-              {period === "week" && "📊 Semana"}
-              {period === "month" && "📈 Mês"}
+            <Badge
+              variant="secondary"
+              className="h-5 text-xs flex items-center gap-1"
+            >
+              {period === "today" && (
+                <>
+                  <Calendar className="h-3 w-3" />
+                  Hoje
+                </>
+              )}
+              {period === "week" && (
+                <>
+                  <BarChart3 className="h-3 w-3" />
+                  Semana
+                </>
+              )}
+              {period === "month" && (
+                <>
+                  <TrendingUp className="h-3 w-3" />
+                  Mês
+                </>
+              )}
             </Badge>
           )}
           {messageTypes.length !== 3 && (
@@ -105,47 +140,47 @@ export default function FilterDropdown() {
             checked={messageTypes.includes("CHAT")}
             onCheckedChange={() => toggleMessageType("CHAT")}
           >
-            💬 Mensagens de Chat
+            <MessageCircle className="h-4 w-4 mr-2" />
+            Mensagens de Chat
           </DropdownMenuCheckboxItem>
           <DropdownMenuCheckboxItem
             checked={messageTypes.includes("JOIN")}
             onCheckedChange={() => toggleMessageType("JOIN")}
           >
-            👋 Usuários Entrando
+            <UserPlus className="h-4 w-4 mr-2" />
+            Usuários Entrando
           </DropdownMenuCheckboxItem>
           <DropdownMenuCheckboxItem
             checked={messageTypes.includes("LEAVE")}
             onCheckedChange={() => toggleMessageType("LEAVE")}
           >
-            🚪 Usuários Saindo
+            <LogOut className="h-4 w-4 mr-2" />
+            Usuários Saindo
           </DropdownMenuCheckboxItem>
 
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Período</DropdownMenuLabel>
-          <DropdownMenuCheckboxItem
-            checked={period === "all"}
-            onCheckedChange={() => setPeriod("all")}
+          <DropdownMenuRadioGroup
+            value={period}
+            onValueChange={handlePeriodChange}
           >
-            🕒 Todas as mensagens
-          </DropdownMenuCheckboxItem>
-          <DropdownMenuCheckboxItem
-            checked={period === "today"}
-            onCheckedChange={() => setPeriod("today")}
-          >
-            📅 Hoje
-          </DropdownMenuCheckboxItem>
-          <DropdownMenuCheckboxItem
-            checked={period === "week"}
-            onCheckedChange={() => setPeriod("week")}
-          >
-            📊 Esta semana
-          </DropdownMenuCheckboxItem>
-          <DropdownMenuCheckboxItem
-            checked={period === "month"}
-            onCheckedChange={() => setPeriod("month")}
-          >
-            📈 Este mês
-          </DropdownMenuCheckboxItem>
+            <DropdownMenuRadioItem value="all">
+              <Clock className="h-4 w-4 mr-2" />
+              Todas as mensagens
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="today">
+              <Calendar className="h-4 w-4 mr-2" />
+              Hoje
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="week">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Esta semana
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="month">
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Este mês
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
 
           {/* Botão Limpar Filtros */}
           {hasActiveFilters && (
@@ -158,7 +193,7 @@ export default function FilterDropdown() {
                   onClick={clearFilters}
                   className="w-full"
                 >
-                  <X className="h-4 w-4 mr-2" />
+                  <X className="h-4 w-4" />
                   Limpar Filtros
                 </Button>
               </div>

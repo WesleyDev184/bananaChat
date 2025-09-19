@@ -252,14 +252,14 @@ export function useGroups(): UseGroupsReturn {
 
   // Combinar grupos do usuário e públicos
   useEffect(() => {
-    console.log("🔍 [useGroups] Combinando grupos...");
+    console.log("[useGroups] Combinando grupos...");
     console.log(
-      "🔍 [useGroups] userGroups:",
+      "[useGroups] userGroups:",
       userGroups.length,
       userGroups.map((g) => ({ id: g.id, name: g.name }))
     );
     console.log(
-      "🔍 [useGroups] publicGroups:",
+      "[useGroups] publicGroups:",
       publicGroups.length,
       publicGroups.map((g) => ({ id: g.id, name: g.name }))
     );
@@ -286,13 +286,13 @@ export function useGroups(): UseGroupsReturn {
         ),
       };
       console.log(
-        `🔍 [useGroups] Grupo ${group.id} (${group.name}): isUserMember=${isUserMember}`
+        `[useGroups] Grupo ${group.id} (${group.name}): isUserMember=${isUserMember}`
       );
       return result;
     });
 
     console.log(
-      "🔍 [useGroups] Grupos finais:",
+      "[useGroups] Grupos finais:",
       groupsWithMembershipInfo.length
     );
     setGroups(groupsWithMembershipInfo);
